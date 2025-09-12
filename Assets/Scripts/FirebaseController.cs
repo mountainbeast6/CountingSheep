@@ -111,6 +111,8 @@ public class FirebaseController : MonoBehaviour
             showNotificationMessage("Error", "Email Empty");
             return;
         }
+
+        ResetPasswordSubmit(resetPassEmail.text);
     }
 
     private void showNotificationMessage(string title, string message)
@@ -149,6 +151,17 @@ public class FirebaseController : MonoBehaviour
             if (task.IsFaulted)
             {
                 Debug.LogError("CreateUserWithEmailAndPasswordAsync encountered an error: " + task.Exception);
+
+                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
+                {
+                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
+                    if (firebaseEx != null)
+                    {
+                        var errorCode = (AuthError)firebaseEx.ErrorCode;
+                        showNotificationMessage("Error", GetErrorMessage(errorCode));
+                    }
+                }
+
                 return;
             }
 
@@ -173,6 +186,16 @@ public class FirebaseController : MonoBehaviour
             if (task.IsFaulted)
             {
                 Debug.LogError("SignInWithEmailAndPasswordAsync encountered an error: " + task.Exception);
+
+                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
+                {
+                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
+                    if (firebaseEx != null)
+                    {
+                        var errorCode = (AuthError)firebaseEx.ErrorCode;
+                        showNotificationMessage("Error", GetErrorMessage(errorCode));
+                    }
+                }
                 return;
             }
 
@@ -263,4 +286,67 @@ public class FirebaseController : MonoBehaviour
             }
         }
     }
+
+    private static string GetErrorMessage(AuthError errorCode)
+    {
+        var message = "";
+        switch (errorCode)
+        {
+            case AuthError.AccountExistsWithDifferentCredentials:
+                message = "An account already exists with different credentials";
+                break;
+            case AuthError.MissingPassword:
+                message = "Password is missing";
+                break;
+            case AuthError.WeakPassword:
+                message = "Password is too weak";
+                break;
+            case AuthError.WrongPassword:
+                message = "Password is incorrect";
+                break;
+            case AuthError.EmailAlreadyInUse:
+                message = "An account already exists with that email address";
+                break;
+            case AuthError.InvalidEmail:
+                message = "Invalid email address";
+                break;
+            case AuthError.MissingEmail:
+                message = "Email address is missing";
+                break;
+            default:
+                message = "An unknown error occurred";
+                break;
+        }
+        return message;
+    }
+
+    void ResetPasswordSubmit(string resetPassEmail)
+    {
+        auth.SendPasswordResetEmailAsync(resetPassEmail).ContinueWithOnMainThread(task =>
+        {
+            if (task.IsCanceled)
+            {
+                Debug.LogError("SendPasswordResetEmailAsync was canceled.");
+                return;
+            }
+
+            if (task.IsFaulted)
+            {
+                Debug.LogError("SendPasswordResetEmailAsync encountered an error: " + task.Exception);
+
+                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
+                {
+                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
+                    if (firebaseEx != null)
+                    {
+                        var errorCode = (AuthError)firebaseEx.ErrorCode;
+                        showNotificationMessage("Error", GetErrorMessage(errorCode));
+                    }
+                }
+            }
+
+            showNotificationMessage("Alert", "Reset Password Email Sent");
+        });
+    }
+
 }
