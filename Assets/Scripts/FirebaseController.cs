@@ -11,7 +11,7 @@ using Firebase.Extensions;
 
 public class FirebaseController : MonoBehaviour
 {
-    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel;
+    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel;
     public TMP_InputField loginEmail, loginPassword, signupEmail, signupPassword, signupCPassword, signupUserName, resetPassEmail;
     public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text;
     public Toggle rememberMe;
@@ -56,6 +56,10 @@ public class FirebaseController : MonoBehaviour
         signupPanel.SetActive(false);
         profilePanel.SetActive(false);
         resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(false);
     }
     public void OpenSignUpPanel()
     {
@@ -63,6 +67,10 @@ public class FirebaseController : MonoBehaviour
         signupPanel.SetActive(true);
         profilePanel.SetActive(false);
         resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(false);
     }
     public void OpenProfilePanel()
     {
@@ -70,6 +78,10 @@ public class FirebaseController : MonoBehaviour
         signupPanel.SetActive(false);
         profilePanel.SetActive(true);
         resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(true);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(false);
     }
 
     public void OpenResetPassPanel()
@@ -78,6 +90,45 @@ public class FirebaseController : MonoBehaviour
         signupPanel.SetActive(false);
         profilePanel.SetActive(false);
         resetPasswordPanel.SetActive(true);
+        tabsPanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(false);
+    }
+
+    public void OpenGoalsPanel()
+    {
+        loginPanel.SetActive(false);
+        signupPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(true);
+        goalsPanel.SetActive(true);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(false);
+    }
+
+    public void OpenStatsPanel()
+    {
+        loginPanel.SetActive(false);
+        signupPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(true);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(true);
+        settingsPanel.SetActive(false);
+    }
+    public void OpenSettingsPanel()
+    {
+        loginPanel.SetActive(false);
+        signupPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(true);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(true);
     }
 
     public void LoginUser()
@@ -138,6 +189,7 @@ public class FirebaseController : MonoBehaviour
         profileUserName_Text.text = "";
         OpenLoginPanel();
     }
+
 
     void CreateUser(string email, string password, string Username)
     {
