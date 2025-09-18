@@ -11,14 +11,15 @@ using Firebase.Extensions;
 
 public class FirebaseController : MonoBehaviour
 {
-    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel;
+    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel, homePanel, inventoryPanel, shopPanel;
     public TMP_InputField loginEmail, loginPassword, signupEmail, signupPassword, signupCPassword, signupUserName, resetPassEmail;
-    public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text;
+    public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text, userMoney;
     public Toggle rememberMe;
     Firebase.Auth.FirebaseAuth auth;
     Firebase.Auth.FirebaseUser user;
 
     bool isSignIn = false;
+    int testMoney = 1000;
 
     private void Start()
     {
@@ -28,6 +29,7 @@ public class FirebaseController : MonoBehaviour
             notificationPanel.SetActive(false);
         }
 
+        userMoney.text = testMoney.ToString();
         Firebase.FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
         {
             var dependencyStatus = task.Result;
@@ -56,19 +58,19 @@ public class FirebaseController : MonoBehaviour
         signupPanel.SetActive(false);
         profilePanel.SetActive(false);
         resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        homePanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+        shopPanel.SetActive(false);
     }
     public void OpenSignUpPanel()
     {
         loginPanel.SetActive(false);
         signupPanel.SetActive(true);
         profilePanel.SetActive(false);
-        resetPasswordPanel.SetActive(false);
-    }
-    public void OpenProfilePanel()
-    {
-        loginPanel.SetActive(false);
-        signupPanel.SetActive(false);
-        profilePanel.SetActive(true);
         resetPasswordPanel.SetActive(false);
     }
 
@@ -78,6 +80,79 @@ public class FirebaseController : MonoBehaviour
         signupPanel.SetActive(false);
         profilePanel.SetActive(false);
         resetPasswordPanel.SetActive(true);
+    }
+
+    public void OpenHomePanel()
+    {
+        loginPanel.SetActive(false);
+        signupPanel.SetActive(false);
+        resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(true);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+    }
+    public void OpenProfilePanel()
+    {
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(true);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+    }
+
+    public void OpenGoalsPanel()
+    {
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(true);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+    }
+
+    public void OpenStatsPanel()
+    {
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(true);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+    }
+    public void OpenSettingsPanel()
+    {
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(true);
+        inventoryPanel.SetActive(false);
+    }
+
+    public void OpenShopPanel()
+    {
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(true);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
     }
 
     public void LoginUser()
@@ -131,6 +206,16 @@ public class FirebaseController : MonoBehaviour
         notificationPanel.SetActive(false);
     }
 
+    public void ShowInventory()
+    {
+        inventoryPanel.SetActive(true);
+    }
+
+    public void CloseInventory()
+    {
+        inventoryPanel.SetActive(false);
+    }
+
     public void LogOut()
     {
         auth.SignOut();
@@ -138,6 +223,7 @@ public class FirebaseController : MonoBehaviour
         profileUserName_Text.text = "";
         OpenLoginPanel();
     }
+
 
     void CreateUser(string email, string password, string Username)
     {
@@ -205,7 +291,7 @@ public class FirebaseController : MonoBehaviour
 
             profileUserName_Text.text = "" + result.User.DisplayName;
             profileUserEmail_Text.text = "" + result.User.Email;
-            OpenProfilePanel();
+            OpenHomePanel();
         });
     }
 
@@ -282,7 +368,7 @@ public class FirebaseController : MonoBehaviour
                 isSigned = true;
                 profileUserName_Text.text = "" + user.DisplayName;
                 profileUserEmail_Text.text = "" + user.Email;
-                OpenProfilePanel();
+                OpenHomePanel();
             }
         }
     }
