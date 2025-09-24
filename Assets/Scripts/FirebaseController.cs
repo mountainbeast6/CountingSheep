@@ -8,50 +8,64 @@ using TMPro;
 using Firebase;
 using Firebase.Auth;
 using Firebase.Extensions;
+using Firebase.Firestore;
 
 public class FirebaseController : MonoBehaviour
 {
+    [Header("Panels")]
     public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel, homePanel, inventoryPanel, shopPanel;
+
+    [Header("Inputs")]
     public TMP_InputField loginEmail, loginPassword, signupEmail, signupPassword, signupCPassword, signupUserName, resetPassEmail;
+
+    [Header("UI Texts")]
     public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text, userMoney;
+
+    [Header("Other UI")]
     public Toggle rememberMe;
-    Firebase.Auth.FirebaseAuth auth;
-    Firebase.Auth.FirebaseUser user;
+    public Button loginButton, signupButton;
 
-    bool isSignIn = false;
-    int testMoney = 1000;
+    private FirebaseAuth auth;
+    private FirebaseUser user;
+    public FirestoreService firestoreService;
+    private bool isSignIn = false;
+    public string currentUserId;
+    private bool firebaseReady = false;
 
-    private void Start()
+    private async void Start()
     {
-        // Hide notification panel at the very beginning
-        if (notificationPanel != null)
+        notificationPanel?.SetActive(false);
+
+        firestoreService = new FirestoreService();
+
+        loginButton.interactable = false;
+        signupButton.interactable = false;
+
+        var dependencyStatus = await FirebaseApp.CheckAndFixDependenciesAsync();
+        if (dependencyStatus == DependencyStatus.Available)
         {
-            notificationPanel.SetActive(false);
+            InitializeFirebase();
         }
-
-        userMoney.text = testMoney.ToString();
-        Firebase.FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
+        else
         {
-            var dependencyStatus = task.Result;
-            if (dependencyStatus == Firebase.DependencyStatus.Available)
-            {
-                // Create and hold a reference to your FirebaseApp,
-                // where app is a Firebase.FirebaseApp property of your application class.
-                InitializeFirebase();
-
-                // Set a flag here to indicate whether Firebase is ready to use by your app.
-            }
-            else
-            {
-                UnityEngine.Debug.LogError(System.String.Format(
-                "Could not resolve all Firebase dependencies: {0}", dependencyStatus));
-                // Firebase Unity SDK is not safe to use here.
-            }
-        });
+            Debug.LogError($"Could not resolve all Firebase dependencies: {dependencyStatus}");
+        }
 
         OpenLoginPanel();
     }
 
+    void InitializeFirebase()
+    {
+        auth = FirebaseAuth.DefaultInstance;
+        auth.StateChanged += AuthStateChanged;
+        AuthStateChanged(this, null);
+
+        firebaseReady = true;
+        loginButton.interactable = true;
+        signupButton.interactable = true;
+    }
+
+    // -------------------- Panels --------------------
     public void OpenLoginPanel()
     {
         loginPanel.SetActive(true);
@@ -66,6 +80,7 @@ public class FirebaseController : MonoBehaviour
         inventoryPanel.SetActive(false);
         shopPanel.SetActive(false);
     }
+
     public void OpenSignUpPanel()
     {
         loginPanel.SetActive(false);
@@ -96,6 +111,7 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
     }
+
     public void OpenProfilePanel()
     {
         tabsPanel.SetActive(true);
@@ -131,6 +147,7 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
     }
+
     public void OpenSettingsPanel()
     {
         tabsPanel.SetActive(true);
@@ -155,46 +172,11 @@ public class FirebaseController : MonoBehaviour
         inventoryPanel.SetActive(false);
     }
 
-    public void LoginUser()
-    {
-        if (string.IsNullOrEmpty(loginEmail.text) || string.IsNullOrEmpty(loginPassword.text))
-        {
-            showNotificationMessage("Error", "One or more Fields Empty");
-            return;
-        }
-
-        // Do login
-        SignInUser(loginEmail.text, loginPassword.text);
-    }
-
-    public void SignUpUser()
-    {
-        if (string.IsNullOrEmpty(signupEmail.text) || string.IsNullOrEmpty(signupPassword.text) || string.IsNullOrEmpty(signupCPassword.text) || string.IsNullOrEmpty(signupUserName.text))
-        {
-            showNotificationMessage("Error", "One or more Fields Empty");
-            return;
-        }
-
-        // Do Signup
-        CreateUser(signupEmail.text, signupPassword.text, signupUserName.text);
-    }
-
-    public void ResetPassword()
-    {
-        if (string.IsNullOrEmpty(resetPassEmail.text))
-        {
-            showNotificationMessage("Error", "Email Empty");
-            return;
-        }
-
-        ResetPasswordSubmit(resetPassEmail.text);
-    }
-
+    // -------------------- Notifications --------------------
     private void showNotificationMessage(string title, string message)
     {
-        notif_Title_Text.text = "" + title;
-        notif_Message_Text.text = "" + message;
-
+        notif_Title_Text.text = title;
+        notif_Message_Text.text = message;
         notificationPanel.SetActive(true);
     }
 
@@ -202,18 +184,168 @@ public class FirebaseController : MonoBehaviour
     {
         notif_Title_Text.text = "";
         notif_Message_Text.text = "";
-
         notificationPanel.SetActive(false);
     }
 
-    public void ShowInventory()
+    // -------------------- Auth --------------------
+    public async void LoginUser()
     {
-        inventoryPanel.SetActive(true);
+        if (!firebaseReady || auth == null)
+        {
+            showNotificationMessage("Error", "Firebase not ready yet.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(loginEmail.text) || string.IsNullOrEmpty(loginPassword.text))
+        {
+            showNotificationMessage("Error", "One or more Fields Empty");
+            return;
+        }
+
+        try
+        {
+            await auth.SignInWithEmailAndPasswordAsync(loginEmail.text, loginPassword.text);
+
+            if (auth.CurrentUser == null)
+            {
+                showNotificationMessage("Error", "Login failed. Try again.");
+                return;
+            }
+
+            currentUserId = auth.CurrentUser.UserId;
+
+            // Load or create player data
+            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+            if (player == null)
+            {
+                player = new PlayerData
+                {
+                    Name = auth.CurrentUser.DisplayName ?? loginEmail.text,
+                    Email = auth.CurrentUser.Email ?? loginEmail.text,
+                    Money = 1000
+                };
+                await firestoreService.SavePlayerAsync(currentUserId, player);
+            }
+
+            // Update UI
+            userMoney.text = player.Money.ToString();
+            profileUserName_Text.text = player.Name;
+            profileUserEmail_Text.text = player.Email;
+
+            OpenHomePanel();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Login error: " + ex);
+            showNotificationMessage("Error", "Login failed");
+        }
     }
 
-    public void CloseInventory()
+    public async void SignUpUser()
     {
-        inventoryPanel.SetActive(false);
+        if (!firebaseReady || auth == null)
+        {
+            showNotificationMessage("Error", "Firebase not ready yet.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(signupEmail.text) || string.IsNullOrEmpty(signupPassword.text) ||
+            string.IsNullOrEmpty(signupCPassword.text) || string.IsNullOrEmpty(signupUserName.text))
+        {
+            showNotificationMessage("Error", "One or more Fields Empty");
+            return;
+        }
+
+        try
+        {
+            await auth.CreateUserWithEmailAndPasswordAsync(signupEmail.text, signupPassword.text);
+
+            if (auth.CurrentUser == null)
+            {
+                showNotificationMessage("Error", "Signup failed. Try again.");
+                return;
+            }
+
+            await UpdateUserProfileAsync(signupUserName.text);
+
+            currentUserId = auth.CurrentUser.UserId;
+
+            PlayerData newPlayer = new PlayerData
+            {
+                Name = auth.CurrentUser.DisplayName ?? signupUserName.text,
+                Email = auth.CurrentUser.Email ?? signupEmail.text,
+                Money = 1000
+            };
+
+            await firestoreService.SavePlayerAsync(currentUserId, newPlayer);
+
+            // Update UI
+            userMoney.text = newPlayer.Money.ToString();
+            profileUserName_Text.text = newPlayer.Name;
+            profileUserEmail_Text.text = newPlayer.Email;
+
+            OpenHomePanel();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Signup error: " + ex);
+            showNotificationMessage("Error", "Signup failed");
+        }
+    }
+
+    public async void ResetPassword()
+    {
+        if (string.IsNullOrEmpty(resetPassEmail.text))
+        {
+            showNotificationMessage("Error", "Email Empty");
+            return;
+        }
+
+        try
+        {
+            await auth.SendPasswordResetEmailAsync(resetPassEmail.text);
+            showNotificationMessage("Alert", "Reset Password Email Sent");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Reset password error: " + ex);
+            showNotificationMessage("Error", "Failed to send reset email");
+        }
+    }
+
+    async Task UpdateUserProfileAsync(string username)
+    {
+        if (auth.CurrentUser == null) return;
+
+        UserProfile profile = new UserProfile { DisplayName = username };
+        try
+        {
+            await auth.CurrentUser.UpdateUserProfileAsync(profile);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Update profile error: " + ex);
+        }
+    }
+
+    void AuthStateChanged(object sender, EventArgs eventArgs)
+    {
+        if (auth.CurrentUser != user)
+        {
+            bool signedIn = user != auth.CurrentUser && auth.CurrentUser != null && auth.CurrentUser.IsValid();
+            if (!signedIn && user != null)
+            {
+                Debug.Log("Signed out " + user.UserId);
+            }
+            user = auth.CurrentUser;
+            isSignIn = signedIn;
+        }
+    }
+
+    void OnDestroy()
+    {
+        if (auth != null)
+            auth.StateChanged -= AuthStateChanged;
     }
 
     public void LogOut()
@@ -224,215 +356,21 @@ public class FirebaseController : MonoBehaviour
         OpenLoginPanel();
     }
 
-
-    void CreateUser(string email, string password, string Username)
+    // -------------------- Goals / Money --------------------
+    public async void CompleteGoal(int moneyEarned)
     {
-        auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWithOnMainThread(task =>
+        if (string.IsNullOrEmpty(currentUserId))
         {
-            if (task.IsCanceled)
-            {
-                Debug.LogError("CreateUserWithEmailAndPasswordAsync was canceled.");
-                return;
-            }
-            if (task.IsFaulted)
-            {
-                Debug.LogError("CreateUserWithEmailAndPasswordAsync encountered an error: " + task.Exception);
+            Debug.LogWarning("No user logged in.");
+            return;
+        }
 
-                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
-                {
-                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
-                    if (firebaseEx != null)
-                    {
-                        var errorCode = (AuthError)firebaseEx.ErrorCode;
-                        showNotificationMessage("Error", GetErrorMessage(errorCode));
-                    }
-                }
+        await firestoreService.EarnMoneyAsync(currentUserId, moneyEarned);
 
-                return;
-            }
-
-            // Firebase user has been created.
-            Firebase.Auth.AuthResult result = task.Result;
-            Debug.LogFormat("Firebase user created successfully: {0} ({1})",
-                result.User.DisplayName, result.User.UserId);
-
-            UpdateUserProfile(Username);
-        });
-    }
-
-    public void SignInUser(string email, string password)
-    {
-        auth.SignInWithEmailAndPasswordAsync(email, password).ContinueWithOnMainThread(task =>
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player != null)
         {
-            if (task.IsCanceled)
-            {
-                Debug.LogError("SignInWithEmailAndPasswordAsync was canceled.");
-                return;
-            }
-            if (task.IsFaulted)
-            {
-                Debug.LogError("SignInWithEmailAndPasswordAsync encountered an error: " + task.Exception);
-
-                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
-                {
-                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
-                    if (firebaseEx != null)
-                    {
-                        var errorCode = (AuthError)firebaseEx.ErrorCode;
-                        showNotificationMessage("Error", GetErrorMessage(errorCode));
-                    }
-                }
-                return;
-            }
-
-            Firebase.Auth.AuthResult result = task.Result;
-            Debug.LogFormat("User signed in successfully: {0} ({1})",
-                result.User.DisplayName, result.User.UserId);
-
-            profileUserName_Text.text = "" + result.User.DisplayName;
-            profileUserEmail_Text.text = "" + result.User.Email;
-            OpenHomePanel();
-        });
-    }
-
-    void InitializeFirebase()
-    {
-        auth = Firebase.Auth.FirebaseAuth.DefaultInstance;
-        auth.StateChanged += AuthStateChanged;
-        AuthStateChanged(this, null);
-    }
-
-    void AuthStateChanged(object sender, System.EventArgs eventArgs)
-    {
-        if (auth.CurrentUser != user)
-        {
-            bool signedIn = user != auth.CurrentUser && auth.CurrentUser != null
-                && auth.CurrentUser.IsValid();
-            if (!signedIn && user != null)
-            {
-                Debug.Log("Signed out " + user.UserId);
-            }
-            user = auth.CurrentUser;
-            if (signedIn)
-            {
-                Debug.Log("Signed in " + user.UserId);
-                isSignIn = true;
-            }
+            userMoney.text = player.Money.ToString();
         }
     }
-
-    void OnDestroy()
-    {
-        auth.StateChanged -= AuthStateChanged;
-        auth = null;
-    }
-
-    void UpdateUserProfile(string UserName)
-    {
-        Firebase.Auth.FirebaseUser user = auth.CurrentUser;
-        if (user != null)
-        {
-            Firebase.Auth.UserProfile profile = new Firebase.Auth.UserProfile
-            {
-                DisplayName = UserName,
-                PhotoUrl = new System.Uri("https://placehold.co/150"),
-            };
-            user.UpdateUserProfileAsync(profile).ContinueWith(task =>
-            {
-                if (task.IsCanceled)
-                {
-                    Debug.LogError("UpdateUserProfileAsync was canceled.");
-                    return;
-                }
-                if (task.IsFaulted)
-                {
-                    Debug.LogError("UpdateUserProfileAsync encountered an error: " + task.Exception);
-                    return;
-                }
-
-                Debug.Log("User profile updated successfully.");
-
-                showNotificationMessage("Alert", "Account Successfully Created");
-            });
-        }
-    }
-
-    bool isSigned = false;
-
-    void Update()
-    {
-        if (isSignIn)
-        {
-            if (!isSigned)
-            {
-                isSigned = true;
-                profileUserName_Text.text = "" + user.DisplayName;
-                profileUserEmail_Text.text = "" + user.Email;
-                OpenHomePanel();
-            }
-        }
-    }
-
-    private static string GetErrorMessage(AuthError errorCode)
-    {
-        var message = "";
-        switch (errorCode)
-        {
-            case AuthError.AccountExistsWithDifferentCredentials:
-                message = "An account already exists with different credentials";
-                break;
-            case AuthError.MissingPassword:
-                message = "Password is missing";
-                break;
-            case AuthError.WeakPassword:
-                message = "Password is too weak";
-                break;
-            case AuthError.WrongPassword:
-                message = "Password is incorrect";
-                break;
-            case AuthError.EmailAlreadyInUse:
-                message = "An account already exists with that email address";
-                break;
-            case AuthError.InvalidEmail:
-                message = "Invalid email address";
-                break;
-            case AuthError.MissingEmail:
-                message = "Email address is missing";
-                break;
-            default:
-                message = "An unknown error occurred";
-                break;
-        }
-        return message;
-    }
-
-    void ResetPasswordSubmit(string resetPassEmail)
-    {
-        auth.SendPasswordResetEmailAsync(resetPassEmail).ContinueWithOnMainThread(task =>
-        {
-            if (task.IsCanceled)
-            {
-                Debug.LogError("SendPasswordResetEmailAsync was canceled.");
-                return;
-            }
-
-            if (task.IsFaulted)
-            {
-                Debug.LogError("SendPasswordResetEmailAsync encountered an error: " + task.Exception);
-
-                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
-                {
-                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
-                    if (firebaseEx != null)
-                    {
-                        var errorCode = (AuthError)firebaseEx.ErrorCode;
-                        showNotificationMessage("Error", GetErrorMessage(errorCode));
-                    }
-                }
-            }
-
-            showNotificationMessage("Alert", "Reset Password Email Sent");
-        });
-    }
-
 }
