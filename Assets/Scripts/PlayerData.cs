@@ -1,4 +1,5 @@
 using Firebase.Firestore;
+using System.Collections.Generic;
 
 [FirestoreData]
 public class PlayerData
@@ -11,4 +12,7 @@ public class PlayerData
 
     [FirestoreProperty]
     public int Money { get; set; }
+
+    [FirestoreProperty]
+    public List<string> CompletedGoals { get; set; } // store completed goal IDs
 }
