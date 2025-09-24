@@ -366,13 +366,13 @@ public class FirebaseController : MonoBehaviour
     // Goal 2
     public void CompleteGoal2()
     {
-        CompleteGoal("goal2",100);
+        CompleteGoal("goal2", 100);
     }
 
     // Goal 3
     public void CompleteGoal3()
     {
-        CompleteGoal("goal3",200);
+        CompleteGoal("goal3", 200);
     }
 
     public async void CompleteGoal(string goalId, int moneyEarned)
@@ -400,6 +400,40 @@ public class FirebaseController : MonoBehaviour
 
             // Update UI
             userMoney.text = player.Money.ToString();
+        }
+    }
+
+    // -----------------SHOP-------------------------------------
+    public async void BuyShopItem(string itemId)
+    {
+        if (string.IsNullOrEmpty(currentUserId))
+        {
+            Debug.LogWarning("No user logged in.");
+            return;
+        }
+
+        ShopItem item = ShopDatabase.Instance.GetItem(itemId);
+        if (item == null)
+        {
+            Debug.LogError($"Shop item not found: {itemId}");
+            return;
+        }
+
+        // Spend money
+        bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
+        if (success)
+        {
+            await firestoreService.AddItemToInventoryAsync(currentUserId, item.Id);
+
+            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+            if (player != null)
+                userMoney.text = player.Money.ToString();
+
+            showNotificationMessage("Success", $"{item.Name} purchased!");
+        }
+        else
+        {
+            showNotificationMessage("Error", "Not enough money!");
         }
     }
 

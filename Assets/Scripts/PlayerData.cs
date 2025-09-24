@@ -14,5 +14,8 @@ public class PlayerData
     public int Money { get; set; }
 
     [FirestoreProperty]
-    public List<string> CompletedGoals { get; set; } // store completed goal IDs
+    public List<string> CompletedGoals { get; set; } 
+    
+    [FirestoreProperty]
+    public List<string> Inventory { get; set; }
 }

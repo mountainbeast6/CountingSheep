@@ -1,6 +1,8 @@
 using Firebase.Firestore;
 using System.Threading.Tasks;
 using UnityEngine;
+using System.Collections.Generic;
+
 
 public class FirestoreService
 {
@@ -73,4 +75,30 @@ public class FirestoreService
         }
         return false; // not enough money
     }
+
+    // Add an item to inventory
+    public async Task AddItemToInventoryAsync(string userId, string itemId)
+    {
+        PlayerData player = await LoadPlayerAsync(userId);
+        if (player != null)
+        {
+            if (player.Inventory == null)
+                player.Inventory = new List<string>();
+
+            player.Inventory.Add(itemId);
+            await SavePlayerAsync(userId, player);
+        }
+    }
+
+    // Remove item from inventory (if consumable)
+    public async Task RemoveItemFromInventoryAsync(string userId, string itemId)
+    {
+        PlayerData player = await LoadPlayerAsync(userId);
+        if (player != null && player.Inventory != null)
+        {
+            player.Inventory.Remove(itemId);
+            await SavePlayerAsync(userId, player);
+        }
+    }
+
 }
