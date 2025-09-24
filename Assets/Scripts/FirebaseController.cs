@@ -357,20 +357,46 @@ public class FirebaseController : MonoBehaviour
     }
 
     // -------------------- Goals / Money --------------------
+    // Goal 1
+    public void CompleteGoal1()
+    {
+        CompleteGoal(50);
+    }
+
+    // Goal 2
+    public void CompleteGoal2()
+    {
+        CompleteGoal(100);
+    }
+
+    // Goal 3
+    public void CompleteGoal3()
+    {
+        CompleteGoal(200);
+    }
+
     public async void CompleteGoal(int moneyEarned)
     {
-        if (string.IsNullOrEmpty(currentUserId))
+        // Hide the button that was clicked
+        GameObject goalObject = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+        if (goalObject != null)
         {
-            Debug.LogWarning("No user logged in.");
-            return;
+            goalObject.SetActive(false);
         }
 
-        await firestoreService.EarnMoneyAsync(currentUserId, moneyEarned);
-
-        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
-        if (player != null)
+        // Add money in Firestore
+        if (!string.IsNullOrEmpty(currentUserId))
         {
-            userMoney.text = player.Money.ToString();
+            await firestoreService.EarnMoneyAsync(currentUserId, moneyEarned);
+
+            // Update UI locally
+            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+            if (player != null)
+            {
+                userMoney.text = player.Money.ToString();
+            }
         }
     }
+
+
 }
