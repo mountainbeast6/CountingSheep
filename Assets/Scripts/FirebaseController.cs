@@ -9,11 +9,12 @@ using Firebase;
 using Firebase.Auth;
 using Firebase.Extensions;
 using Firebase.Firestore;
+using System.Linq;
 
 public class FirebaseController : MonoBehaviour
 {
     [Header("Panels")]
-    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel, homePanel, inventoryPanel, shopPanel;
+    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel, homePanel, shopPanel;
 
     [Header("Inputs")]
     public TMP_InputField loginEmail, loginPassword, signupEmail, signupPassword, signupCPassword, signupUserName, resetPassEmail;
@@ -31,6 +32,13 @@ public class FirebaseController : MonoBehaviour
     private bool isSignIn = false;
     public string currentUserId;
     private bool firebaseReady = false;
+
+    [Header("Inventory UI")]
+    public GameObject inventoryButtonPrefab; // Prefab for each item slot
+    public Transform inventoryContent; // Parent object (scroll view content or panel)
+    public GameObject inventoryPanel; // The full panel for inventory
+
+    private PlayerData currentPlayer;
 
     private async void Start()
     {
@@ -63,6 +71,11 @@ public class FirebaseController : MonoBehaviour
         firebaseReady = true;
         loginButton.interactable = true;
         signupButton.interactable = true;
+    }
+
+    public void SetPlayerData(PlayerData player)
+    {
+        currentPlayer = player;
     }
 
     // -------------------- Panels --------------------
@@ -226,6 +239,7 @@ public class FirebaseController : MonoBehaviour
                 };
                 await firestoreService.SavePlayerAsync(currentUserId, player);
             }
+            SetPlayerData(player);
 
             // Update UI
             userMoney.text = player.Money.ToString();
@@ -437,6 +451,47 @@ public class FirebaseController : MonoBehaviour
         }
     }
 
+    // --------------- Inventory -----------------------------------
+    public void ShowInventory()
+    {
+        if (currentPlayer == null || currentPlayer.Inventory == null)
+        {
+            Debug.Log("No inventory to display.");
+            return;
+        }
+
+        inventoryPanel.SetActive(true);
+
+        // Clear old buttons so we don’t duplicate
+        foreach (Transform child in inventoryContent)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // Spawn one button per item in inventory
+        foreach (string itemId in currentPlayer.Inventory)
+        {
+            GameObject buttonObj = Instantiate(inventoryButtonPrefab, inventoryContent);
+            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = itemId;
+
+            Button btn = buttonObj.GetComponent<Button>();
+            btn.onClick.AddListener(() =>
+            {
+                Debug.Log($"Clicked {itemId}");
+                CloseInventory(); // Close when an item is clicked
+            });
+        }
+    }
+
+    public void CloseInventory()
+    {
+        inventoryPanel.SetActive(false);
+
+        foreach (Transform child in inventoryContent)
+        {
+            Destroy(child.gameObject);
+        }
+    }
 
 
 }

@@ -149,6 +149,8 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 1458043132}
+  - {fileID: 2126819774}
   - {fileID: 1300506380}
   - {fileID: 1835808521}
   - {fileID: 1508846648}
@@ -4940,6 +4942,8 @@ MonoBehaviour:
   loginButton: {fileID: 24037043}
   signupButton: {fileID: 389204025}
   currentUserId: 
+  inventoryContent: {fileID: 0}
+  inventoryItemPrefab: {fileID: 0}
 --- !u!1 &645134767
 GameObject:
   m_ObjectHideFlags: 0
@@ -7024,7 +7028,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: Test Item 4
+          m_StringArgument: test4
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &842044704
@@ -9073,7 +9077,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: Test Item 6
+          m_StringArgument: test6
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &1087078477
@@ -9576,7 +9580,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: Test Item 5
+          m_StringArgument: test5
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &1205251533
@@ -10292,7 +10296,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: Test Item 1
+          m_StringArgument: test1
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &1300506382
@@ -10575,8 +10579,6 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1938051350}
-  - {fileID: 1458043132}
-  - {fileID: 2126819774}
   - {fileID: 4455795}
   m_Father: {fileID: 487719712}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -11002,16 +11004,16 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1458043131}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1353436649}
+  m_Father: {fileID: 4455795}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: -617, y: -2135}
+  m_AnchoredPosition: {x: -617.0008, y: -1805.9315}
   m_SizeDelta: {x: 142.0988, y: 147.3957}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1458043133
@@ -11196,9 +11198,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 624787318}
+      - m_Target: {fileID: 624787316}
         m_TargetAssemblyTypeName: FirebaseController, Assembly-CSharp
-        m_MethodName: CloseInventory
+        m_MethodName: 
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -11895,7 +11897,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: Test Item 3
+          m_StringArgument: test3
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &1508846650
@@ -12432,8 +12434,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1581280087}
+  - component: {fileID: 1581280088}
   m_Layer: 0
-  m_Name: GameObject
+  m_Name: ShopDatabase
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -12454,6 +12457,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1581280088
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1581280086}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca9be142508612e26985deaae638265c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShopDatabase
+  items:
+  - Id: test1
+    Name: Test Item 1
+    Cost: 10
+  - Id: test2
+    Name: Test Item 2
+    Cost: 50
+  - Id: test3
+    Name: Test Item 3
+    Cost: 100
+  - Id: test4
+    Name: Test Item 4
+    Cost: 200
+  - Id: test5
+    Name: Test Item 5
+    Cost: 500
+  - Id: test6
+    Name: Test Item 6
+    Cost: 1000
 --- !u!1 &1603279341
 GameObject:
   m_ObjectHideFlags: 0
@@ -14740,7 +14774,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: Test Item 2
+          m_StringArgument: test2
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &1835808523
@@ -17213,16 +17247,16 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2126819773}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1353436649}
+  m_Father: {fileID: 4455795}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 41.889, y: -855}
+  m_AnchoredPosition: {x: 41.888206, y: -804.71826}
   m_SizeDelta: {x: 1175.7, y: 147.4}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2126819775
@@ -17332,5 +17366,5 @@ SceneRoots:
   - {fileID: 619394802}
   - {fileID: 487719712}
   - {fileID: 794875865}
-  - {fileID: 624787317}
   - {fileID: 1581280087}
+  - {fileID: 624787317}
