@@ -35,14 +35,18 @@ public class FirebaseController : MonoBehaviour
 
     [Header("Inventory UI")]
     public GameObject inventoryButtonPrefab; // Prefab for each item slot
-    public Transform inventoryContent; // Parent object (scroll view content or panel)
-    public GameObject inventoryPanel; // The full panel for inventory
+    public Transform inventoryContent;     // Parent object for inventory buttons
+    public GameObject inventoryPanel;      // Inventory panel
+
 
     [Header("Swap Prompt UI")]
     public GameObject swapPromptPanel;       // The panel that pops up
     public TMPro.TMP_Text swapPromptText;    // Text inside the panel
     public Button swapYesButton;             // Yes button
     public Button swapNoButton;              // No button
+
+    private ShopDatabase shopDatabase = new ShopDatabase();
+
 
 
 
@@ -66,6 +70,9 @@ public class FirebaseController : MonoBehaviour
         {
             Debug.LogError($"Could not resolve all Firebase dependencies: {dependencyStatus}");
         }
+        if (swapPromptPanel != null)
+        swapPromptPanel.SetActive(false);
+
 
         OpenLoginPanel();
     }
@@ -436,7 +443,7 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        ShopItem item = ShopDatabase.Instance.GetItem(itemId);
+        ShopItem item = shopDatabase.GetItem(itemId);
         if (item == null)
         {
             Debug.LogError($"Shop item not found: {itemId}");
@@ -473,6 +480,7 @@ public class FirebaseController : MonoBehaviour
         if (currentPlayer == null || currentPlayer.Inventory == null)
         {
             Debug.Log("No inventory to display.");
+            inventoryPanel.SetActive(true); // show empty panel
             return;
         }
 
@@ -480,9 +488,7 @@ public class FirebaseController : MonoBehaviour
 
         // Clear old buttons so we don’t duplicate
         foreach (Transform child in inventoryContent)
-        {
             Destroy(child.gameObject);
-        }
 
         // Spawn one button per item in inventory
         foreach (string itemId in currentPlayer.Inventory)
@@ -491,19 +497,26 @@ public class FirebaseController : MonoBehaviour
             buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = itemId;
 
             Button btn = buttonObj.GetComponent<Button>();
-            btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener(async () =>
+
+            // Fire-and-forget async wrapper for the button click
+            btn.onClick.AddListener(() =>
             {
-                Debug.Log($"Clicked {itemId}");
-
-                // Move item to home (handles swap logic)
-                await PlaceItemInHome(itemId);
-
-                // Refresh inventory UI
-                ShowInventory();
+                _ = OnInventoryItemClickedAsync(itemId);
             });
         }
     }
+
+// Async wrapper for placing item in home and closing inventory
+private async Task OnInventoryItemClickedAsync(string itemId)
+{
+    Debug.Log($"Clicked {itemId}");
+
+    await PlaceItemInHome(itemId); // your existing async placement logic
+
+    CloseInventory(); // close the inventory UI after placing
+}
+
+
 
     public void CloseInventory()
     {
@@ -528,7 +541,7 @@ public class FirebaseController : MonoBehaviour
             player.HomeItems = new Dictionary<string, string>();
 
         // Get item type from shop
-        ShopItem item = ShopDatabase.Instance.GetItem(itemId);
+        ShopItem item = shopDatabase.GetItem(itemId);
         if (item == null)
         {
             Debug.LogError($"Item not found in ShopDatabase: {itemId}");
@@ -560,7 +573,7 @@ public class FirebaseController : MonoBehaviour
         await firestoreService.SavePlayerAsync(currentUserId, player);
 
         // Instantiate prefab in the home
-        ShopItem item = ShopDatabase.Instance.GetItem(itemId);
+        ShopItem item = shopDatabase.GetItem(itemId);
         if (item?.Prefab != null)
             Instantiate(item.Prefab, item.HomePosition, Quaternion.identity);
 
@@ -587,13 +600,11 @@ public class FirebaseController : MonoBehaviour
 
             // Move new item to home
             await MoveItemToHome(player, newItemId, itemType);
+
+            // ✅ Close inventory after swap
+            inventoryPanel.SetActive(false);
         });
 
-        swapNoButton.onClick.RemoveAllListeners();
-        swapNoButton.onClick.AddListener(() =>
-        {
-            swapPromptPanel.SetActive(false);
-        });
     }
 
 
