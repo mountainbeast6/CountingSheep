@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 665234ec0b476707eb7ecf4c9e3b41fd
+guid: 9b3f70c11b3def448ba23e8fbed39166
 TextureImporter:
   internalIDToNameTable:
   - first:
@@ -113,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Background
+      name: Backdrop
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 798
-        height: 812
+        width: 3
+        height: 3
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Background: -2426113772406766134
+      Backdrop: -2426113772406766134
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
