@@ -572,6 +572,9 @@ private async Task OnInventoryItemClickedAsync(string itemId)
         // Save player to Firestore
         await firestoreService.SavePlayerAsync(currentUserId, player);
 
+        // ✅ UPDATE: Refresh currentPlayer data
+        currentPlayer = player;
+
         // Instantiate prefab in the home
         ShopItem item = shopDatabase.GetItem(itemId);
         if (item?.Prefab != null)
@@ -581,6 +584,7 @@ private async Task OnInventoryItemClickedAsync(string itemId)
         ShowInventory();
     }
 
+    // Replace your existing ShowSwapPrompt method with this:
     private void ShowSwapPrompt(string itemType, string currentHomeItemId, string newItemId)
     {
         swapPromptPanel.SetActive(true);
@@ -601,10 +605,17 @@ private async Task OnInventoryItemClickedAsync(string itemId)
             // Move new item to home
             await MoveItemToHome(player, newItemId, itemType);
 
-            // ✅ Close inventory after swap
+            // Close inventory after swap
             inventoryPanel.SetActive(false);
         });
 
+        // ✅ FIX: Add the missing No button functionality
+        swapNoButton.onClick.RemoveAllListeners();
+        swapNoButton.onClick.AddListener(() =>
+        {
+            swapPromptPanel.SetActive(false);
+            // Do nothing else - just close the prompt
+        });
     }
 
 
