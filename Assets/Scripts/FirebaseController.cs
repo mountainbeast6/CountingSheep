@@ -37,6 +37,7 @@ public class FirebaseController : MonoBehaviour
     public GameObject inventoryButtonPrefab; // Prefab for each item slot
     public Transform inventoryContent; // Parent object (scroll view content or panel)
     public GameObject inventoryPanel; // The full panel for inventory
+    
 
     private PlayerData currentPlayer;
 
@@ -439,9 +440,14 @@ public class FirebaseController : MonoBehaviour
         {
             await firestoreService.AddItemToInventoryAsync(currentUserId, item.Id);
 
-            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
-            if (player != null)
-                userMoney.text = player.Money.ToString();
+            // Refresh local player data immediately
+            currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+
+            // Update UI
+            if (currentPlayer != null)
+            {
+                userMoney.text = currentPlayer.Money.ToString();
+            }
 
             showNotificationMessage("Success", $"{item.Name} purchased!");
         }
@@ -450,6 +456,7 @@ public class FirebaseController : MonoBehaviour
             showNotificationMessage("Error", "Not enough money!");
         }
     }
+
 
     // --------------- Inventory -----------------------------------
     public void ShowInventory()

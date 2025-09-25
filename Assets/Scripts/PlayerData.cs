@@ -14,8 +14,11 @@ public class PlayerData
     public int Money { get; set; }
 
     [FirestoreProperty]
-    public List<string> CompletedGoals { get; set; } 
-    
+    public List<string> CompletedGoals { get; set; }
+
     [FirestoreProperty]
     public List<string> Inventory { get; set; }
+    
+    [FirestoreProperty]
+    public Dictionary<string, string> HomeItems { get; set; }
 }
