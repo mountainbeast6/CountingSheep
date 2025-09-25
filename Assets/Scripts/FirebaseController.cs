@@ -8,50 +8,92 @@ using TMPro;
 using Firebase;
 using Firebase.Auth;
 using Firebase.Extensions;
+using Firebase.Firestore;
+using System.Linq;
 
 public class FirebaseController : MonoBehaviour
 {
-    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel, homePanel, inventoryPanel, shopPanel;
+    [Header("Panels")]
+    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel, homePanel, shopPanel;
+
+    [Header("Inputs")]
     public TMP_InputField loginEmail, loginPassword, signupEmail, signupPassword, signupCPassword, signupUserName, resetPassEmail;
+
+    [Header("UI Texts")]
     public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text, userMoney;
+
+    [Header("Other UI")]
     public Toggle rememberMe;
-    Firebase.Auth.FirebaseAuth auth;
-    Firebase.Auth.FirebaseUser user;
+    public Button loginButton, signupButton;
 
-    bool isSignIn = false;
-    int testMoney = 1000;
+    private FirebaseAuth auth;
+    private FirebaseUser user;
+    public FirestoreService firestoreService;
+    private bool isSignIn = false;
+    public string currentUserId;
+    private bool firebaseReady = false;
 
-    private void Start()
+    [Header("Inventory UI")]
+    public GameObject inventoryButtonPrefab; // Prefab for each item slot
+    public Transform inventoryContent;     // Parent object for inventory buttons
+    public GameObject inventoryPanel;      // Inventory panel
+
+
+    [Header("Swap Prompt UI")]
+    public GameObject swapPromptPanel;       // The panel that pops up
+    public TMPro.TMP_Text swapPromptText;    // Text inside the panel
+    public Button swapYesButton;             // Yes button
+    public Button swapNoButton;              // No button
+
+    private ShopDatabase shopDatabase = new ShopDatabase();
+
+
+
+
+    private PlayerData currentPlayer;
+
+    private async void Start()
     {
-        // Hide notification panel at the very beginning
-        if (notificationPanel != null)
+        notificationPanel?.SetActive(false);
+
+        firestoreService = new FirestoreService();
+
+        loginButton.interactable = false;
+        signupButton.interactable = false;
+
+        var dependencyStatus = await FirebaseApp.CheckAndFixDependenciesAsync();
+        if (dependencyStatus == DependencyStatus.Available)
         {
-            notificationPanel.SetActive(false);
+            InitializeFirebase();
         }
-
-        userMoney.text = testMoney.ToString();
-        Firebase.FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
+        else
         {
-            var dependencyStatus = task.Result;
-            if (dependencyStatus == Firebase.DependencyStatus.Available)
-            {
-                // Create and hold a reference to your FirebaseApp,
-                // where app is a Firebase.FirebaseApp property of your application class.
-                InitializeFirebase();
+            Debug.LogError($"Could not resolve all Firebase dependencies: {dependencyStatus}");
+        }
+        if (swapPromptPanel != null)
+        swapPromptPanel.SetActive(false);
 
-                // Set a flag here to indicate whether Firebase is ready to use by your app.
-            }
-            else
-            {
-                UnityEngine.Debug.LogError(System.String.Format(
-                "Could not resolve all Firebase dependencies: {0}", dependencyStatus));
-                // Firebase Unity SDK is not safe to use here.
-            }
-        });
 
         OpenLoginPanel();
     }
 
+    void InitializeFirebase()
+    {
+        auth = FirebaseAuth.DefaultInstance;
+        auth.StateChanged += AuthStateChanged;
+        AuthStateChanged(this, null);
+
+        firebaseReady = true;
+        loginButton.interactable = true;
+        signupButton.interactable = true;
+    }
+
+    public void SetPlayerData(PlayerData player)
+    {
+        currentPlayer = player;
+    }
+
+    // -------------------- Panels --------------------
     public void OpenLoginPanel()
     {
         loginPanel.SetActive(true);
@@ -66,6 +108,7 @@ public class FirebaseController : MonoBehaviour
         inventoryPanel.SetActive(false);
         shopPanel.SetActive(false);
     }
+
     public void OpenSignUpPanel()
     {
         loginPanel.SetActive(false);
@@ -96,6 +139,7 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
     }
+
     public void OpenProfilePanel()
     {
         tabsPanel.SetActive(true);
@@ -131,6 +175,7 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
     }
+
     public void OpenSettingsPanel()
     {
         tabsPanel.SetActive(true);
@@ -155,46 +200,11 @@ public class FirebaseController : MonoBehaviour
         inventoryPanel.SetActive(false);
     }
 
-    public void LoginUser()
-    {
-        if (string.IsNullOrEmpty(loginEmail.text) || string.IsNullOrEmpty(loginPassword.text))
-        {
-            showNotificationMessage("Error", "One or more Fields Empty");
-            return;
-        }
-
-        // Do login
-        SignInUser(loginEmail.text, loginPassword.text);
-    }
-
-    public void SignUpUser()
-    {
-        if (string.IsNullOrEmpty(signupEmail.text) || string.IsNullOrEmpty(signupPassword.text) || string.IsNullOrEmpty(signupCPassword.text) || string.IsNullOrEmpty(signupUserName.text))
-        {
-            showNotificationMessage("Error", "One or more Fields Empty");
-            return;
-        }
-
-        // Do Signup
-        CreateUser(signupEmail.text, signupPassword.text, signupUserName.text);
-    }
-
-    public void ResetPassword()
-    {
-        if (string.IsNullOrEmpty(resetPassEmail.text))
-        {
-            showNotificationMessage("Error", "Email Empty");
-            return;
-        }
-
-        ResetPasswordSubmit(resetPassEmail.text);
-    }
-
+    // -------------------- Notifications --------------------
     private void showNotificationMessage(string title, string message)
     {
-        notif_Title_Text.text = "" + title;
-        notif_Message_Text.text = "" + message;
-
+        notif_Title_Text.text = title;
+        notif_Message_Text.text = message;
         notificationPanel.SetActive(true);
     }
 
@@ -202,18 +212,171 @@ public class FirebaseController : MonoBehaviour
     {
         notif_Title_Text.text = "";
         notif_Message_Text.text = "";
-
         notificationPanel.SetActive(false);
     }
 
-    public void ShowInventory()
+    // -------------------- Auth --------------------
+    public async void LoginUser()
     {
-        inventoryPanel.SetActive(true);
+        if (!firebaseReady || auth == null)
+        {
+            showNotificationMessage("Error", "Firebase not ready yet.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(loginEmail.text) || string.IsNullOrEmpty(loginPassword.text))
+        {
+            showNotificationMessage("Error", "One or more Fields Empty");
+            return;
+        }
+
+        try
+        {
+            await auth.SignInWithEmailAndPasswordAsync(loginEmail.text, loginPassword.text);
+
+            if (auth.CurrentUser == null)
+            {
+                showNotificationMessage("Error", "Login failed. Try again.");
+                return;
+            }
+
+            currentUserId = auth.CurrentUser.UserId;
+
+            // Load or create player data
+            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+            if (player == null)
+            {
+                player = new PlayerData
+                {
+                    Name = auth.CurrentUser.DisplayName ?? loginEmail.text,
+                    Email = auth.CurrentUser.Email ?? loginEmail.text,
+                    Money = 1000
+                };
+                await firestoreService.SavePlayerAsync(currentUserId, player);
+            }
+            SetPlayerData(player);
+
+            // Update UI
+            userMoney.text = player.Money.ToString();
+            profileUserName_Text.text = player.Name;
+            profileUserEmail_Text.text = player.Email;
+
+            OpenHomePanel();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Login error: " + ex);
+            showNotificationMessage("Error", "Login failed");
+        }
     }
 
-    public void CloseInventory()
+    public async void SignUpUser()
     {
-        inventoryPanel.SetActive(false);
+        if (!firebaseReady || auth == null)
+        {
+            showNotificationMessage("Error", "Firebase not ready yet.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(signupEmail.text) || string.IsNullOrEmpty(signupPassword.text) ||
+            string.IsNullOrEmpty(signupCPassword.text) || string.IsNullOrEmpty(signupUserName.text))
+        {
+            showNotificationMessage("Error", "One or more Fields Empty");
+            return;
+        }
+
+        try
+        {
+            await auth.CreateUserWithEmailAndPasswordAsync(signupEmail.text, signupPassword.text);
+
+            if (auth.CurrentUser == null)
+            {
+                showNotificationMessage("Error", "Signup failed. Try again.");
+                return;
+            }
+
+            await UpdateUserProfileAsync(signupUserName.text);
+
+            currentUserId = auth.CurrentUser.UserId;
+
+            PlayerData newPlayer = new PlayerData
+            {
+                Name = auth.CurrentUser.DisplayName ?? signupUserName.text,
+                Email = auth.CurrentUser.Email ?? signupEmail.text,
+                Money = 1000,
+                Inventory = new List<string>(),
+                HomeItems = new Dictionary<string, string>()
+            };
+
+            await firestoreService.SavePlayerAsync(currentUserId, newPlayer);
+
+            // Update UI
+            userMoney.text = newPlayer.Money.ToString();
+            profileUserName_Text.text = newPlayer.Name;
+            profileUserEmail_Text.text = newPlayer.Email;
+
+            OpenHomePanel();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Signup error: " + ex);
+            showNotificationMessage("Error", "Signup failed");
+        }
+    }
+
+    public async void ResetPassword()
+    {
+        if (string.IsNullOrEmpty(resetPassEmail.text))
+        {
+            showNotificationMessage("Error", "Email Empty");
+            return;
+        }
+
+        try
+        {
+            await auth.SendPasswordResetEmailAsync(resetPassEmail.text);
+            showNotificationMessage("Alert", "Reset Password Email Sent");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Reset password error: " + ex);
+            showNotificationMessage("Error", "Failed to send reset email");
+        }
+    }
+
+    async Task UpdateUserProfileAsync(string username)
+    {
+        if (auth.CurrentUser == null) return;
+
+        UserProfile profile = new UserProfile { DisplayName = username };
+        try
+        {
+            await auth.CurrentUser.UpdateUserProfileAsync(profile);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Update profile error: " + ex);
+        }
+    }
+
+    void AuthStateChanged(object sender, EventArgs eventArgs)
+    {
+        if (auth.CurrentUser != user)
+        {
+            bool signedIn = user != auth.CurrentUser && auth.CurrentUser != null && auth.CurrentUser.IsValid();
+            if (!signedIn && user != null)
+            {
+                Debug.Log("Signed out " + user.UserId);
+            }
+            user = auth.CurrentUser;
+            isSignIn = signedIn;
+        }
+    }
+
+    void OnDestroy()
+    {
+        if (auth != null)
+            auth.StateChanged -= AuthStateChanged;
     }
 
     public void LogOut()
@@ -224,215 +387,225 @@ public class FirebaseController : MonoBehaviour
         OpenLoginPanel();
     }
 
-
-    void CreateUser(string email, string password, string Username)
+    // -------------------- Goals / Money --------------------
+    // Goal 1
+    public void CompleteGoal1()
     {
-        auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWithOnMainThread(task =>
-        {
-            if (task.IsCanceled)
-            {
-                Debug.LogError("CreateUserWithEmailAndPasswordAsync was canceled.");
-                return;
-            }
-            if (task.IsFaulted)
-            {
-                Debug.LogError("CreateUserWithEmailAndPasswordAsync encountered an error: " + task.Exception);
-
-                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
-                {
-                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
-                    if (firebaseEx != null)
-                    {
-                        var errorCode = (AuthError)firebaseEx.ErrorCode;
-                        showNotificationMessage("Error", GetErrorMessage(errorCode));
-                    }
-                }
-
-                return;
-            }
-
-            // Firebase user has been created.
-            Firebase.Auth.AuthResult result = task.Result;
-            Debug.LogFormat("Firebase user created successfully: {0} ({1})",
-                result.User.DisplayName, result.User.UserId);
-
-            UpdateUserProfile(Username);
-        });
+        CompleteGoal("goal1", 50);
     }
 
-    public void SignInUser(string email, string password)
+    // Goal 2
+    public void CompleteGoal2()
     {
-        auth.SignInWithEmailAndPasswordAsync(email, password).ContinueWithOnMainThread(task =>
-        {
-            if (task.IsCanceled)
-            {
-                Debug.LogError("SignInWithEmailAndPasswordAsync was canceled.");
-                return;
-            }
-            if (task.IsFaulted)
-            {
-                Debug.LogError("SignInWithEmailAndPasswordAsync encountered an error: " + task.Exception);
-
-                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
-                {
-                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
-                    if (firebaseEx != null)
-                    {
-                        var errorCode = (AuthError)firebaseEx.ErrorCode;
-                        showNotificationMessage("Error", GetErrorMessage(errorCode));
-                    }
-                }
-                return;
-            }
-
-            Firebase.Auth.AuthResult result = task.Result;
-            Debug.LogFormat("User signed in successfully: {0} ({1})",
-                result.User.DisplayName, result.User.UserId);
-
-            profileUserName_Text.text = "" + result.User.DisplayName;
-            profileUserEmail_Text.text = "" + result.User.Email;
-            OpenHomePanel();
-        });
+        CompleteGoal("goal2", 100);
     }
 
-    void InitializeFirebase()
+    // Goal 3
+    public void CompleteGoal3()
     {
-        auth = Firebase.Auth.FirebaseAuth.DefaultInstance;
-        auth.StateChanged += AuthStateChanged;
-        AuthStateChanged(this, null);
+        CompleteGoal("goal3", 200);
     }
 
-    void AuthStateChanged(object sender, System.EventArgs eventArgs)
+    public async void CompleteGoal(string goalId, int moneyEarned)
     {
-        if (auth.CurrentUser != user)
+        // Hide the button immediately
+        GameObject goalObject = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+        if (goalObject != null)
+            goalObject.SetActive(false);
+
+        if (!string.IsNullOrEmpty(currentUserId))
         {
-            bool signedIn = user != auth.CurrentUser && auth.CurrentUser != null
-                && auth.CurrentUser.IsValid();
-            if (!signedIn && user != null)
-            {
-                Debug.Log("Signed out " + user.UserId);
-            }
-            user = auth.CurrentUser;
-            if (signedIn)
-            {
-                Debug.Log("Signed in " + user.UserId);
-                isSignIn = true;
-            }
+            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+
+            // Add money
+            player.Money += moneyEarned;
+
+            // Mark goal as completed
+            if (player.CompletedGoals == null)
+                player.CompletedGoals = new List<string>();
+
+            if (!player.CompletedGoals.Contains(goalId))
+                player.CompletedGoals.Add(goalId);
+
+            await firestoreService.SavePlayerAsync(currentUserId, player);
+
+            // Update UI
+            userMoney.text = player.Money.ToString();
         }
     }
 
-    void OnDestroy()
+    // -----------------SHOP-------------------------------------
+    public async void BuyShopItem(string itemId)
     {
-        auth.StateChanged -= AuthStateChanged;
-        auth = null;
+        if (string.IsNullOrEmpty(currentUserId))
+        {
+            Debug.LogWarning("No user logged in.");
+            return;
+        }
+
+        ShopItem item = shopDatabase.GetItem(itemId);
+        if (item == null)
+        {
+            Debug.LogError($"Shop item not found: {itemId}");
+            return;
+        }
+
+        // Spend money
+        bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
+        if (success)
+        {
+            await firestoreService.AddItemToInventoryAsync(currentUserId, item.Id);
+
+            // Refresh local player data immediately
+            currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+
+            // Update UI
+            if (currentPlayer != null)
+            {
+                userMoney.text = currentPlayer.Money.ToString();
+            }
+
+            showNotificationMessage("Success", $"{item.Name} purchased!");
+        }
+        else
+        {
+            showNotificationMessage("Error", "Not enough money!");
+        }
     }
 
-    void UpdateUserProfile(string UserName)
+
+    // --------------- Inventory -----------------------------------
+    public void ShowInventory()
     {
-        Firebase.Auth.FirebaseUser user = auth.CurrentUser;
-        if (user != null)
+        if (currentPlayer == null || currentPlayer.Inventory == null)
         {
-            Firebase.Auth.UserProfile profile = new Firebase.Auth.UserProfile
-            {
-                DisplayName = UserName,
-                PhotoUrl = new System.Uri("https://placehold.co/150"),
-            };
-            user.UpdateUserProfileAsync(profile).ContinueWith(task =>
-            {
-                if (task.IsCanceled)
-                {
-                    Debug.LogError("UpdateUserProfileAsync was canceled.");
-                    return;
-                }
-                if (task.IsFaulted)
-                {
-                    Debug.LogError("UpdateUserProfileAsync encountered an error: " + task.Exception);
-                    return;
-                }
+            Debug.Log("No inventory to display.");
+            inventoryPanel.SetActive(true); // show empty panel
+            return;
+        }
 
-                Debug.Log("User profile updated successfully.");
+        inventoryPanel.SetActive(true);
 
-                showNotificationMessage("Alert", "Account Successfully Created");
+        // Clear old buttons so we don’t duplicate
+        foreach (Transform child in inventoryContent)
+            Destroy(child.gameObject);
+
+        // Spawn one button per item in inventory
+        foreach (string itemId in currentPlayer.Inventory)
+        {
+            GameObject buttonObj = Instantiate(inventoryButtonPrefab, inventoryContent);
+            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = itemId;
+
+            Button btn = buttonObj.GetComponent<Button>();
+
+            // Fire-and-forget async wrapper for the button click
+            btn.onClick.AddListener(() =>
+            {
+                _ = OnInventoryItemClickedAsync(itemId);
             });
         }
     }
 
-    bool isSigned = false;
+// Async wrapper for placing item in home and closing inventory
+private async Task OnInventoryItemClickedAsync(string itemId)
+{
+    Debug.Log($"Clicked {itemId}");
 
-    void Update()
+    await PlaceItemInHome(itemId); // your existing async placement logic
+
+    CloseInventory(); // close the inventory UI after placing
+}
+
+
+
+    public void CloseInventory()
     {
-        if (isSignIn)
+        inventoryPanel.SetActive(false);
+
+        foreach (Transform child in inventoryContent)
         {
-            if (!isSigned)
-            {
-                isSigned = true;
-                profileUserName_Text.text = "" + user.DisplayName;
-                profileUserEmail_Text.text = "" + user.Email;
-                OpenHomePanel();
-            }
+            Destroy(child.gameObject);
         }
     }
 
-    private static string GetErrorMessage(AuthError errorCode)
+    // ----------------- Home Items ----------------------------
+    public async Task PlaceItemInHome(string itemId)
     {
-        var message = "";
-        switch (errorCode)
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null || player.Inventory == null) return;
+
+        // Make sure HomeItems dictionary exists
+        if (player.HomeItems == null)
+            player.HomeItems = new Dictionary<string, string>();
+
+        // Get item type from shop
+        ShopItem item = shopDatabase.GetItem(itemId);
+        if (item == null)
         {
-            case AuthError.AccountExistsWithDifferentCredentials:
-                message = "An account already exists with different credentials";
-                break;
-            case AuthError.MissingPassword:
-                message = "Password is missing";
-                break;
-            case AuthError.WeakPassword:
-                message = "Password is too weak";
-                break;
-            case AuthError.WrongPassword:
-                message = "Password is incorrect";
-                break;
-            case AuthError.EmailAlreadyInUse:
-                message = "An account already exists with that email address";
-                break;
-            case AuthError.InvalidEmail:
-                message = "Invalid email address";
-                break;
-            case AuthError.MissingEmail:
-                message = "Email address is missing";
-                break;
-            default:
-                message = "An unknown error occurred";
-                break;
+            Debug.LogError($"Item not found in ShopDatabase: {itemId}");
+            return;
         }
-        return message;
+        string itemType = item.Type;
+        Debug.Log($"Placing item {itemId} of type {itemType}");
+
+        // Check if slot is occupied
+        if (player.HomeItems.TryGetValue(itemType, out string existingItemId))
+        {
+            ShowSwapPrompt(itemType, existingItemId, itemId);
+            return;
+        }
+
+        // Slot empty: move item directly
+        await MoveItemToHome(player, itemId, itemType);
     }
 
-    void ResetPasswordSubmit(string resetPassEmail)
+    private async Task MoveItemToHome(PlayerData player, string itemId, string itemType)
     {
-        auth.SendPasswordResetEmailAsync(resetPassEmail).ContinueWithOnMainThread(task =>
+        // Remove from inventory
+        player.Inventory.Remove(itemId);
+
+        // Place in HomeItems dictionary
+        player.HomeItems[itemType] = itemId;
+
+        // Save player to Firestore
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+
+        // Instantiate prefab in the home
+        ShopItem item = shopDatabase.GetItem(itemId);
+        if (item?.Prefab != null)
+            Instantiate(item.Prefab, item.HomePosition, Quaternion.identity);
+
+        // Refresh inventory UI
+        ShowInventory();
+    }
+
+    private void ShowSwapPrompt(string itemType, string currentHomeItemId, string newItemId)
+    {
+        swapPromptPanel.SetActive(true);
+        swapPromptText.text = $"You already have a {itemType} in your home. Swap it with this one?";
+
+        swapYesButton.onClick.RemoveAllListeners();
+        swapYesButton.onClick.AddListener(async () =>
         {
-            if (task.IsCanceled)
-            {
-                Debug.LogError("SendPasswordResetEmailAsync was canceled.");
-                return;
-            }
+            swapPromptPanel.SetActive(false);
 
-            if (task.IsFaulted)
-            {
-                Debug.LogError("SendPasswordResetEmailAsync encountered an error: " + task.Exception);
+            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+            if (player == null) return;
 
-                foreach (Exception exception in task.Exception.Flatten().InnerExceptions)
-                {
-                    Firebase.FirebaseException firebaseEx = exception as Firebase.FirebaseException;
-                    if (firebaseEx != null)
-                    {
-                        var errorCode = (AuthError)firebaseEx.ErrorCode;
-                        showNotificationMessage("Error", GetErrorMessage(errorCode));
-                    }
-                }
-            }
+            // Swap: move old home item back to inventory
+            if (!player.Inventory.Contains(currentHomeItemId))
+                player.Inventory.Add(currentHomeItemId);
 
-            showNotificationMessage("Alert", "Reset Password Email Sent");
+            // Move new item to home
+            await MoveItemToHome(player, newItemId, itemType);
+
+            // ✅ Close inventory after swap
+            inventoryPanel.SetActive(false);
         });
+
     }
+
 
 }
