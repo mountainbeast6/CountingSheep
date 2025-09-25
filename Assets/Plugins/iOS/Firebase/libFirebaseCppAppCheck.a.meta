@@ -1,9 +1,9 @@
 fileFormatVersion: 2
-guid: 7e0d636394aa43cd80440641a013d37c
+guid: 5ba930d6364e431c97591fb429b6f553
 labels:
 - gvh
 - gvh_version-13.2.0
-- gvhp_exportpath-Firebase/Plugins/x86_64/FirebaseCppDatabase.so
+- gvhp_exportpath-Plugins/iOS/Firebase/libFirebaseCppAppCheck.a
 timeCreated: 1480838400
 PluginImporter:
   serializedVersion: 1
@@ -19,7 +19,7 @@ PluginImporter:
       enabled: 0
       settings: {}
     Editor:
-      enabled: 1
+      enabled: 0
       settings:
         CPU: AnyCPU
         DefaultValueInitialized: true
@@ -29,13 +29,13 @@ PluginImporter:
       settings:
         CPU: None
     Linux64:
-      enabled: 1
+      enabled: 0
       settings:
-        CPU: x86_64
+        CPU: None
     LinuxUniversal:
-      enabled: 1
+      enabled: 0
       settings:
-        CPU: AnyCPU
+        CPU: None
     OSXIntel:
       enabled: 0
       settings:
@@ -67,7 +67,7 @@ PluginImporter:
       settings:
         CPU: AnyCPU
     iOS:
-      enabled: 0
+      enabled: 1
       settings:
         CompileFlags:
         FrameworkDependencies:

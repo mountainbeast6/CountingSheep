@@ -4924,7 +4924,6 @@ MonoBehaviour:
   statsPanel: {fileID: 649052672}
   settingsPanel: {fileID: 1504218355}
   homePanel: {fileID: 1272755242}
-  inventoryPanel: {fileID: 551681531}
   shopPanel: {fileID: 1353436648}
   loginEmail: {fileID: 1830614127}
   loginPassword: {fileID: 1790431243}
@@ -4942,8 +4941,9 @@ MonoBehaviour:
   loginButton: {fileID: 24037043}
   signupButton: {fileID: 389204025}
   currentUserId: 
+  inventoryButtonPrefab: {fileID: 8660249848220110151, guid: 3d55c2edb5af499c5b0598e28566fbce, type: 3}
   inventoryContent: {fileID: 0}
-  inventoryItemPrefab: {fileID: 0}
+  inventoryPanel: {fileID: 551681531}
 --- !u!1 &645134767
 GameObject:
   m_ObjectHideFlags: 0
