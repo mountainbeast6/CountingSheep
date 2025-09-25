@@ -45,6 +45,14 @@ public class FirebaseController : MonoBehaviour
     public Button swapYesButton;             // Yes button
     public Button swapNoButton;              // No button
 
+    [Header("Shop UI")]
+    public GameObject shopButtonPrefab;    // Prefab for each shop item
+    public Transform shopContent;          // Parent object for shop buttons
+
+    [Header("Home Display UI")]
+    public GameObject homeItemButtonPrefab;  // Prefab for home items display
+    public Transform homeContent;           // Parent object for home item buttons
+
     private ShopDatabase shopDatabase = new ShopDatabase();
 
 
@@ -71,7 +79,7 @@ public class FirebaseController : MonoBehaviour
             Debug.LogError($"Could not resolve all Firebase dependencies: {dependencyStatus}");
         }
         if (swapPromptPanel != null)
-        swapPromptPanel.SetActive(false);
+            swapPromptPanel.SetActive(false);
 
 
         OpenLoginPanel();
@@ -138,6 +146,7 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+        DisplayHomeItems();
     }
 
     public void OpenProfilePanel()
@@ -198,6 +207,7 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+        PopulateShop();
     }
 
     // -------------------- Notifications --------------------
@@ -473,6 +483,32 @@ public class FirebaseController : MonoBehaviour
         }
     }
 
+    public void PopulateShop()
+    {
+        if (shopDatabase == null) return;
+
+        // Clear existing buttons
+        foreach (Transform child in shopContent)
+            Destroy(child.gameObject);
+
+        // Get all shop items from your database
+        foreach (var kvp in shopDatabase.Items)
+        {
+            ShopItem item = kvp.Value;
+
+            GameObject buttonObj = Instantiate(shopButtonPrefab, shopContent);
+
+            // Update the button text to show item name and cost
+            TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
+            buttonText.text = $"{item.Name}\n${item.Cost}";
+
+            // Set up the buy button
+            Button buyButton = buttonObj.GetComponent<Button>();
+            string itemId = item.Id; // Capture for closure
+            buyButton.onClick.AddListener(() => BuyShopItem(itemId));
+        }
+    }
+
 
     // --------------- Inventory -----------------------------------
     public void ShowInventory()
@@ -486,7 +522,7 @@ public class FirebaseController : MonoBehaviour
 
         inventoryPanel.SetActive(true);
 
-        // Clear old buttons so we don’t duplicate
+        // Clear old buttons so we don't duplicate
         foreach (Transform child in inventoryContent)
             Destroy(child.gameObject);
 
@@ -494,7 +530,10 @@ public class FirebaseController : MonoBehaviour
         foreach (string itemId in currentPlayer.Inventory)
         {
             GameObject buttonObj = Instantiate(inventoryButtonPrefab, inventoryContent);
-            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = itemId;
+
+            ShopItem item = shopDatabase.GetItem(itemId);
+            string displayText = item != null ? item.Name : itemId;
+            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
 
             Button btn = buttonObj.GetComponent<Button>();
 
@@ -506,15 +545,15 @@ public class FirebaseController : MonoBehaviour
         }
     }
 
-// Async wrapper for placing item in home and closing inventory
-private async Task OnInventoryItemClickedAsync(string itemId)
-{
-    Debug.Log($"Clicked {itemId}");
+    // Async wrapper for placing item in home and closing inventory
+    private async Task OnInventoryItemClickedAsync(string itemId)
+    {
+        Debug.Log($"Clicked {itemId}");
 
-    await PlaceItemInHome(itemId); // your existing async placement logic
+        await PlaceItemInHome(itemId); // your existing async placement logic
 
-    CloseInventory(); // close the inventory UI after placing
-}
+        CloseInventory(); // close the inventory UI after placing
+    }
 
 
 
@@ -572,7 +611,7 @@ private async Task OnInventoryItemClickedAsync(string itemId)
         // Save player to Firestore
         await firestoreService.SavePlayerAsync(currentUserId, player);
 
-        // ✅ UPDATE: Refresh currentPlayer data
+        // Refresh currentPlayer data
         currentPlayer = player;
 
         // Instantiate prefab in the home
@@ -582,6 +621,7 @@ private async Task OnInventoryItemClickedAsync(string itemId)
 
         // Refresh inventory UI
         ShowInventory();
+        DisplayHomeItems();
     }
 
     // Replace your existing ShowSwapPrompt method with this:
@@ -609,7 +649,7 @@ private async Task OnInventoryItemClickedAsync(string itemId)
             inventoryPanel.SetActive(false);
         });
 
-        // ✅ FIX: Add the missing No button functionality
+        // Add the missing No button functionality
         swapNoButton.onClick.RemoveAllListeners();
         swapNoButton.onClick.AddListener(() =>
         {
@@ -618,5 +658,64 @@ private async Task OnInventoryItemClickedAsync(string itemId)
         });
     }
 
+    public void DisplayHomeItems()
+    {
+        if (currentPlayer == null || currentPlayer.HomeItems == null)
+        {
+            return;
+        }
+
+        // Clear existing home item buttons
+        foreach (Transform child in homeContent)
+            Destroy(child.gameObject);
+
+        // Create a button for each item in home
+        foreach (var kvp in currentPlayer.HomeItems)
+        {
+            string itemType = kvp.Key;   // "bed", "chair", etc.
+            string itemId = kvp.Value;   // "bed1", "chair2", etc.
+
+            GameObject buttonObj = Instantiate(homeItemButtonPrefab, homeContent);
+
+            // Show item name
+            ShopItem item = shopDatabase.GetItem(itemId);
+            string displayText = item != null ? item.Name : itemId;
+            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
+
+            // Click functionality to remove item from home back to inventory
+            Button btn = buttonObj.GetComponent<Button>();
+            btn.onClick.AddListener(() => ReturnItemToInventory(itemId, itemType));
+        }
+    }
+    
+    public async void ReturnItemToInventory(string itemId, string itemType)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null) return;
+
+        // Remove from home
+        if (player.HomeItems != null && player.HomeItems.ContainsKey(itemType))
+        {
+            player.HomeItems.Remove(itemType);
+        }
+
+        // Add back to inventory
+        if (player.Inventory == null)
+            player.Inventory = new List<string>();
+        
+        if (!player.Inventory.Contains(itemId))
+            player.Inventory.Add(itemId);
+
+        // Save to database
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+
+        // Update local reference
+        currentPlayer = player;
+
+        // Refresh displays
+        DisplayHomeItems();
+    }
 
 }
