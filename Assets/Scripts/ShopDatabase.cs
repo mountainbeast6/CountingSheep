@@ -1,29 +1,90 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class ShopDatabase : MonoBehaviour
+public class ShopDatabase
 {
-    public static ShopDatabase Instance;
+    private static ShopDatabase _instance;
+    public static ShopDatabase Instance => _instance ??= new ShopDatabase();
 
-    [SerializeField] private List<ShopItem> items = new List<ShopItem>();
+    private Dictionary<string, ShopItem> items;
 
-    private Dictionary<string, ShopItem> itemDict;
-
-    private void Awake()
+    private ShopDatabase()
     {
-        if (Instance == null) Instance = this;
+        items = new Dictionary<string, ShopItem>();
 
-        // Convert list → dictionary
-        itemDict = new Dictionary<string, ShopItem>();
-        foreach (var item in items)
+        // Create 4 beds
+        for (int i = 1; i <= 4; i++)
         {
-            if (!itemDict.ContainsKey(item.Id))
-                itemDict.Add(item.Id, item);
+            items.Add($"bed{i}", new ShopItem
+            {
+                Id = $"bed{i}",
+                Name = $"Bed {i}",
+                Type = "bed",
+                Cost = 100,
+                Prefab = Resources.Load<GameObject>($"Prefabs/Bed{i}"),
+                HomePosition = GetPositionForSlot("bed", i)
+            });
+        }
+
+        // Create 4 chairs
+        for (int i = 1; i <= 4; i++)
+        {
+            items.Add($"chair{i}", new ShopItem
+            {
+                Id = $"chair{i}",
+                Name = $"Chair {i}",
+                Type = "chair",
+                Cost = 50,
+                Prefab = Resources.Load<GameObject>($"Prefabs/Chair{i}"),
+                HomePosition = GetPositionForSlot("chair", i)
+            });
+        }
+
+        // Create 4 desks
+        for (int i = 1; i <= 4; i++)
+        {
+            items.Add($"desk{i}", new ShopItem
+            {
+                Id = $"desk{i}",
+                Name = $"Desk {i}",
+                Type = "desk",
+                Cost = 150,
+                Prefab = Resources.Load<GameObject>($"Prefabs/Desk{i}"),
+                HomePosition = GetPositionForSlot("desk", i)
+            });
+        }
+
+        // Create 4 lamps
+        for (int i = 1; i <= 4; i++)
+        {
+            items.Add($"lamp{i}", new ShopItem
+            {
+                Id = $"lamp{i}",
+                Name = $"Lamp {i}",
+                Type = "lamp",
+                Cost = 30,
+                Prefab = Resources.Load<GameObject>($"Prefabs/Lamp{i}"),
+                HomePosition = GetPositionForSlot("lamp", i)
+            });
         }
     }
 
-    public ShopItem GetItem(string id)
+    public ShopItem GetItem(string itemId)
     {
-        return itemDict.ContainsKey(id) ? itemDict[id] : null;
+        items.TryGetValue(itemId, out ShopItem item);
+        return item;
+    }
+
+    private Vector3 GetPositionForSlot(string type, int index)
+    {
+        // Example positions for home placement
+        switch (type)
+        {
+            case "bed": return new Vector3(index * 2, 0, 0);
+            case "chair": return new Vector3(index * 2, 0, 2);
+            case "desk": return new Vector3(index * 2, 0, 4);
+            case "lamp": return new Vector3(index * 2, 0, 6);
+            default: return Vector3.zero;
+        }
     }
 }

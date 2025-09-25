@@ -37,7 +37,14 @@ public class FirebaseController : MonoBehaviour
     public GameObject inventoryButtonPrefab; // Prefab for each item slot
     public Transform inventoryContent; // Parent object (scroll view content or panel)
     public GameObject inventoryPanel; // The full panel for inventory
-    
+
+    [Header("Swap Prompt UI")]
+    public GameObject swapPromptPanel;       // The panel that pops up
+    public TMPro.TMP_Text swapPromptText;    // Text inside the panel
+    public Button swapYesButton;             // Yes button
+    public Button swapNoButton;              // No button
+
+
 
     private PlayerData currentPlayer;
 
@@ -289,7 +296,9 @@ public class FirebaseController : MonoBehaviour
             {
                 Name = auth.CurrentUser.DisplayName ?? signupUserName.text,
                 Email = auth.CurrentUser.Email ?? signupEmail.text,
-                Money = 1000
+                Money = 1000,
+                Inventory = new List<string>(),
+                HomeItems = new Dictionary<string, string>()
             };
 
             await firestoreService.SavePlayerAsync(currentUserId, newPlayer);
@@ -500,5 +509,79 @@ public class FirebaseController : MonoBehaviour
         }
     }
 
+    // ----------------- Home Items ----------------------------
+    public async void PlaceItemInHome(string itemId)
+    {
+        if (string.IsNullOrEmpty(currentUserId) || currentPlayer == null) return;
+
+        ShopItem item = ShopDatabase.Instance.GetItem(itemId);
+        if (item == null) return;
+
+        string slot = item.Type; // "bed", "chair", etc.
+
+        // Check if slot is taken
+        if (currentPlayer.HomeItems.ContainsKey(slot))
+        {
+            ShowSwapPrompt(slot, currentPlayer.HomeItems[slot], itemId);
+            return;
+        }
+
+        // Place item if slot empty
+        await MoveItemToHome(itemId, slot);
+    }
+
+    private void ShowSwapPrompt(string slot, string currentHomeItemId, string newItemId)
+    {
+        swapPromptPanel.SetActive(true);
+        swapPromptText.text = $"You already have a {slot} in your home. Swap it?";
+
+        swapYesButton.onClick.RemoveAllListeners();
+        swapYesButton.onClick.AddListener(async () =>
+        {
+            swapPromptPanel.SetActive(false);
+
+            // Move old home item back to inventory
+            if (!currentPlayer.Inventory.Contains(currentHomeItemId))
+                currentPlayer.Inventory.Add(currentHomeItemId);
+
+            // Swap in HomeItems
+            currentPlayer.HomeItems[slot] = newItemId;
+
+            // Remove new item from inventory
+            currentPlayer.Inventory.Remove(newItemId);
+
+            await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+            ShowInventory();
+        });
+
+        swapNoButton.onClick.RemoveAllListeners();
+        swapNoButton.onClick.AddListener(() =>
+        {
+            swapPromptPanel.SetActive(false);
+        });
+    }
+
+    private async Task MoveItemToHome(string itemId, string slot)
+    {
+        currentPlayer.Inventory.Remove(itemId);
+        currentPlayer.HomeItems[slot] = itemId;
+
+        await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+        // Spawn prefab at fixed position (you can define positions per slot)
+        ShopItem item = ShopDatabase.Instance.GetItem(itemId);
+        if (item != null)
+        {
+            Vector3 itemPosition = item.HomePosition;
+            Instantiate(item.Prefab, itemPosition, Quaternion.identity);
+        }
+        GameObject prefab = ShopDatabase.Instance.GetItem(itemId).Prefab;
+        Vector3 position = item.HomePosition;
+        Instantiate(item.Prefab, position, Quaternion.identity);
+
+
+        ShowInventory();
+    }
 
 }
