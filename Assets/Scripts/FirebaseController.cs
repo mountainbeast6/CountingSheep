@@ -54,6 +54,14 @@ public class FirebaseController : MonoBehaviour
     public Transform homeContent;           // Parent object for home item buttons
     public RectTransform furnitureDisplayArea; // The area where furniture sprites will appear
     public GameObject[] furniturePrefabs;      // Array of your furniture sprite prefabs
+    public GameObject bedPrefab;
+    public GameObject chairPrefab;
+    public GameObject deskPrefab;
+    public GameObject lampPrefab;
+    public Sprite[] bedSprites;
+    public Sprite[] chairSprites;
+    public Sprite[] deskSprites;
+    public Sprite[] lampSprites;
 
     // Dictionary to track instantiated furniture GameObjects
     private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
@@ -83,6 +91,7 @@ public class FirebaseController : MonoBehaviour
         if (swapPromptPanel != null)
             swapPromptPanel.SetActive(false);
 
+        InitializeFurnitureSprites();
 
         OpenLoginPanel();
     }
@@ -96,6 +105,36 @@ public class FirebaseController : MonoBehaviour
         firebaseReady = true;
         loginButton.interactable = true;
         signupButton.interactable = true;
+    }
+
+    void InitializeFurnitureSprites()
+    {
+        if (shopDatabase == null) return;
+        
+        // Map sprites to item IDs
+        for (int i = 0; i < bedSprites.Length && i < 4; i++)
+        {
+            if (bedSprites[i] != null)
+                shopDatabase.SetSprite($"bed{i + 1}", bedSprites[i]);
+        }
+        
+        for (int i = 0; i < chairSprites.Length && i < 4; i++)
+        {
+            if (chairSprites[i] != null)
+                shopDatabase.SetSprite($"chair{i + 1}", chairSprites[i]);
+        }
+        
+        for (int i = 0; i < deskSprites.Length && i < 4; i++)
+        {
+            if (deskSprites[i] != null)
+                shopDatabase.SetSprite($"desk{i + 1}", deskSprites[i]);
+        }
+        
+        for (int i = 0; i < lampSprites.Length && i < 4; i++)
+        {
+            if (lampSprites[i] != null)
+                shopDatabase.SetSprite($"lamp{i + 1}", lampSprites[i]);
+        }
     }
 
     public void SetPlayerData(PlayerData player)
@@ -758,7 +797,6 @@ public class FirebaseController : MonoBehaviour
 
     private void SpawnFurnitureSprite(string itemId, string itemType)
     {
-        // Get the prefab for this item type
         GameObject prefab = GetFurniturePrefab(itemType);
         if (prefab == null)
         {
@@ -766,10 +804,23 @@ public class FirebaseController : MonoBehaviour
             return;
         }
         
-        // Instantiate in the furniture display area
         GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
         
-        // Set up the draggable component
+        // Set the correct sprite for this specific item variant
+        UnityEngine.UI.Image img = furnitureObj.GetComponent<UnityEngine.UI.Image>();
+        if (img != null)
+        {
+            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            if (itemSprite != null)
+            {
+                img.sprite = itemSprite;
+            }
+            else
+            {
+                Debug.LogWarning($"No sprite found for item: {itemId}");
+            }
+        }
+        
         DraggableFurniture draggable = furnitureObj.GetComponent<DraggableFurniture>();
         if (draggable == null)
             draggable = furnitureObj.AddComponent<DraggableFurniture>();
@@ -783,7 +834,6 @@ public class FirebaseController : MonoBehaviour
         Vector2 position = GetSavedPosition(itemId, itemType);
         draggable.SetPosition(position);
         
-        // Track this spawned object
         spawnedFurniture[itemId] = furnitureObj;
     }
 
@@ -810,14 +860,14 @@ public class FirebaseController : MonoBehaviour
     // Helper to get the right prefab
     private GameObject GetFurniturePrefab(string itemType)
     {
-        // You'll set this up in the Inspector
-        // For now, you can use a simple naming convention
-        foreach (GameObject prefab in furniturePrefabs)
+        switch (itemType.ToLower())
         {
-            if (prefab.name.ToLower().Contains(itemType.ToLower()))
-                return prefab;
+            case "bed": return bedPrefab;
+            case "chair": return chairPrefab;
+            case "desk": return deskPrefab;
+            case "lamp": return lampPrefab;
+            default: return null;
         }
-        return null;
     }
 
 }
