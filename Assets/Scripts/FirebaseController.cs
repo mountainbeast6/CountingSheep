@@ -52,11 +52,21 @@ public class FirebaseController : MonoBehaviour
     [Header("Home Display UI")]
     public GameObject homeItemButtonPrefab;  // Prefab for home items display
     public Transform homeContent;           // Parent object for home item buttons
+    public RectTransform furnitureDisplayArea; // The area where furniture sprites will appear
+    public GameObject[] furniturePrefabs;      // Array of your furniture sprite prefabs
+    public GameObject bedPrefab;
+    public GameObject chairPrefab;
+    public GameObject deskPrefab;
+    public GameObject lampPrefab;
+    public Sprite[] bedSprites;
+    public Sprite[] chairSprites;
+    public Sprite[] deskSprites;
+    public Sprite[] lampSprites;
+
+    // Dictionary to track instantiated furniture GameObjects
+    private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
 
     private ShopDatabase shopDatabase = new ShopDatabase();
-
-
-
 
     private PlayerData currentPlayer;
 
@@ -81,6 +91,7 @@ public class FirebaseController : MonoBehaviour
         if (swapPromptPanel != null)
             swapPromptPanel.SetActive(false);
 
+        InitializeFurnitureSprites();
 
         OpenLoginPanel();
     }
@@ -94,6 +105,36 @@ public class FirebaseController : MonoBehaviour
         firebaseReady = true;
         loginButton.interactable = true;
         signupButton.interactable = true;
+    }
+
+    void InitializeFurnitureSprites()
+    {
+        if (shopDatabase == null) return;
+        
+        // Map sprites to item IDs
+        for (int i = 0; i < bedSprites.Length && i < 4; i++)
+        {
+            if (bedSprites[i] != null)
+                shopDatabase.SetSprite($"bed{i + 1}", bedSprites[i]);
+        }
+        
+        for (int i = 0; i < chairSprites.Length && i < 4; i++)
+        {
+            if (chairSprites[i] != null)
+                shopDatabase.SetSprite($"chair{i + 1}", chairSprites[i]);
+        }
+        
+        for (int i = 0; i < deskSprites.Length && i < 4; i++)
+        {
+            if (deskSprites[i] != null)
+                shopDatabase.SetSprite($"desk{i + 1}", deskSprites[i]);
+        }
+        
+        for (int i = 0; i < lampSprites.Length && i < 4; i++)
+        {
+            if (lampSprites[i] != null)
+                shopDatabase.SetSprite($"lamp{i + 1}", lampSprites[i]);
+        }
     }
 
     public void SetPlayerData(PlayerData player)
@@ -133,7 +174,7 @@ public class FirebaseController : MonoBehaviour
         resetPasswordPanel.SetActive(true);
     }
 
-    public void OpenHomePanel()
+    public async void OpenHomePanel()
     {
         loginPanel.SetActive(false);
         signupPanel.SetActive(false);
@@ -146,6 +187,11 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+        
+        if (!string.IsNullOrEmpty(currentUserId))
+        {
+            currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+        }
         DisplayHomeItems();
     }
 
@@ -658,33 +704,47 @@ public class FirebaseController : MonoBehaviour
         });
     }
 
-    public void DisplayHomeItems()
+    public async void DisplayHomeItems()
     {
         if (currentPlayer == null || currentPlayer.HomeItems == null)
         {
             return;
         }
 
-        // Clear existing home item buttons
+        // Reload fresh data from Firebase to get latest positions
+        currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+        
+        if (currentPlayer == null || currentPlayer.HomeItems == null)
+        {
+            return;
+        }
+
+        // Clear existing home item BUTTONS
         foreach (Transform child in homeContent)
             Destroy(child.gameObject);
+        
+        // Clear existing SPRITES
+        foreach (var kvp in spawnedFurniture)
+            if (kvp.Value != null)
+                Destroy(kvp.Value);
+        spawnedFurniture.Clear();
 
-        // Create a button for each item in home
+        // Create a button AND sprite for each item in home
         foreach (var kvp in currentPlayer.HomeItems)
         {
-            string itemType = kvp.Key;   // "bed", "chair", etc.
-            string itemId = kvp.Value;   // "bed1", "chair2", etc.
+            string itemType = kvp.Key;
+            string itemId = kvp.Value;
 
+            // 1. Create the UI button
             GameObject buttonObj = Instantiate(homeItemButtonPrefab, homeContent);
-
-            // Show item name
             ShopItem item = shopDatabase.GetItem(itemId);
             string displayText = item != null ? item.Name : itemId;
             buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
-
-            // Click functionality to remove item from home back to inventory
             Button btn = buttonObj.GetComponent<Button>();
             btn.onClick.AddListener(() => ReturnItemToInventory(itemId, itemType));
+
+            // 2. Create the draggable sprite
+            SpawnFurnitureSprite(itemId, itemType);
         }
     }
     
@@ -718,4 +778,120 @@ public class FirebaseController : MonoBehaviour
         DisplayHomeItems();
     }
 
+    public async void SaveFurniturePosition(string itemId, string itemType, Vector2 position)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+        
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null) return;
+        
+        if (player.HomeItemPositions == null)
+            player.HomeItemPositions = new Dictionary<string, Vector2Data>();
+        
+        player.HomeItemPositions[itemId] = new Vector2Data(position.x, position.y);
+        
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+        
+        Debug.Log($"Saved position for {itemId}: {position}");
+    }
+
+    private void SpawnFurnitureSprite(string itemId, string itemType)
+    {
+        GameObject prefab = GetFurniturePrefab(itemType);
+        if (prefab == null)
+        {
+            Debug.LogWarning($"No prefab found for type: {itemType}");
+            return;
+        }
+        
+        GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
+        
+        // Set the correct sprite for this specific item variant
+        UnityEngine.UI.Image img = furnitureObj.GetComponent<UnityEngine.UI.Image>();
+        if (img != null)
+        {
+            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            if (itemSprite != null)
+            {
+                img.sprite = itemSprite;
+            }
+            else
+            {
+                Debug.LogWarning($"No sprite found for item: {itemId}");
+            }
+        }
+        
+        DraggableFurniture draggable = furnitureObj.GetComponent<DraggableFurniture>();
+        if (draggable == null)
+            draggable = furnitureObj.AddComponent<DraggableFurniture>();
+        
+        draggable.itemId = itemId;
+        draggable.itemType = itemType;
+        draggable.firebaseController = this;
+        draggable.draggableArea = furnitureDisplayArea;
+        
+        // Load saved position or use default
+        Vector2 position = GetSavedPosition(itemId, itemType);
+        draggable.SetPosition(position);
+        
+        spawnedFurniture[itemId] = furnitureObj;
+    }
+
+    // Helper to get saved position
+    private Vector2 GetSavedPosition(string itemId, string itemType)
+    {
+        if (currentPlayer.HomeItemPositions != null && 
+            currentPlayer.HomeItemPositions.TryGetValue(itemId, out Vector2Data savedPos))
+        {
+            return savedPos.ToVector2();
+        }
+        
+        // Return default position based on type
+        switch (itemType.ToLower())
+        {
+            case "bed": return new Vector2(-150, 100);
+            case "chair": return new Vector2(150, 100);
+            case "desk": return new Vector2(-150, -100);
+            case "lamp": return new Vector2(150, -100);
+            default: return Vector2.zero;
+        }
+    }
+
+    // Helper to get the right prefab
+    private GameObject GetFurniturePrefab(string itemType)
+    {
+        switch (itemType.ToLower())
+        {
+            case "bed": return bedPrefab;
+            case "chair": return chairPrefab;
+            case "desk": return deskPrefab;
+            case "lamp": return lampPrefab;
+            default: return null;
+        }
+    }
+
+}
+
+[System.Serializable]
+[Firebase.Firestore.FirestoreData]
+public class Vector2Data
+{
+    [Firebase.Firestore.FirestoreProperty]
+    public float x { get; set; }
+    
+    [Firebase.Firestore.FirestoreProperty]
+    public float y { get; set; }
+    
+    public Vector2Data() { }
+    
+    public Vector2Data(float x, float y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+    
+    public Vector2 ToVector2()
+    {
+        return new Vector2(x, y);
+    }
 }

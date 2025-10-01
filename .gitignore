@@ -28,5 +28,6 @@ Assets/Firebase/Plugins/x86_64/*.bundle
 Assets/Firebase/Plugins/x86_64/*.so
 Assets/Firebase/Plugins/x86_64/*.unitypackage
 Assets/google-services.json
+Assets/google-services.json.meta
 Assets/StreamingAssets/google-services-desktop.json
 Assets/Plugins/Android/FirebaseApp.androidlib/res/values/google-services.xml
