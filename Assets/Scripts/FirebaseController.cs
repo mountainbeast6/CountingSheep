@@ -135,7 +135,7 @@ public class FirebaseController : MonoBehaviour
         resetPasswordPanel.SetActive(true);
     }
 
-    public void OpenHomePanel()
+    public async void OpenHomePanel()
     {
         loginPanel.SetActive(false);
         signupPanel.SetActive(false);
@@ -148,6 +148,11 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+        
+        if (!string.IsNullOrEmpty(currentUserId))
+        {
+            currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+        }
         DisplayHomeItems();
     }
 
@@ -660,8 +665,16 @@ public class FirebaseController : MonoBehaviour
         });
     }
 
-    public void DisplayHomeItems()
+    public async void DisplayHomeItems()
     {
+        if (currentPlayer == null || currentPlayer.HomeItems == null)
+        {
+            return;
+        }
+
+        // Reload fresh data from Firebase to get latest positions
+        currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+        
         if (currentPlayer == null || currentPlayer.HomeItems == null)
         {
             return;
@@ -683,7 +696,7 @@ public class FirebaseController : MonoBehaviour
             string itemType = kvp.Key;
             string itemId = kvp.Value;
 
-            // 1. Create the UI button (your existing code)
+            // 1. Create the UI button
             GameObject buttonObj = Instantiate(homeItemButtonPrefab, homeContent);
             ShopItem item = shopDatabase.GetItem(itemId);
             string displayText = item != null ? item.Name : itemId;
@@ -691,7 +704,7 @@ public class FirebaseController : MonoBehaviour
             Button btn = buttonObj.GetComponent<Button>();
             btn.onClick.AddListener(() => ReturnItemToInventory(itemId, itemType));
 
-            // 2. Create the draggable sprite (NEW!)
+            // 2. Create the draggable sprite
             SpawnFurnitureSprite(itemId, itemType);
         }
     }
@@ -784,8 +797,14 @@ public class FirebaseController : MonoBehaviour
         }
         
         // Return default position based on type
-        DraggableFurniture temp = new DraggableFurniture { itemType = itemType };
-        return temp.GetDefaultPositionForType();
+        switch (itemType.ToLower())
+        {
+            case "bed": return new Vector2(-150, 100);
+            case "chair": return new Vector2(150, 100);
+            case "desk": return new Vector2(-150, -100);
+            case "lamp": return new Vector2(150, -100);
+            default: return Vector2.zero;
+        }
     }
 
     // Helper to get the right prefab
@@ -804,12 +823,16 @@ public class FirebaseController : MonoBehaviour
 }
 
 [System.Serializable]
+[Firebase.Firestore.FirestoreData]
 public class Vector2Data
 {
-    public float x;
-    public float y;
+    [Firebase.Firestore.FirestoreProperty]
+    public float x { get; set; }
     
-    public Vector2Data() { } // Parameterless constructor for Firestore
+    [Firebase.Firestore.FirestoreProperty]
+    public float y { get; set; }
+    
+    public Vector2Data() { }
     
     public Vector2Data(float x, float y)
     {
