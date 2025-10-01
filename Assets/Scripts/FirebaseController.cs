@@ -52,11 +52,13 @@ public class FirebaseController : MonoBehaviour
     [Header("Home Display UI")]
     public GameObject homeItemButtonPrefab;  // Prefab for home items display
     public Transform homeContent;           // Parent object for home item buttons
+    public RectTransform furnitureDisplayArea; // The area where furniture sprites will appear
+    public GameObject[] furniturePrefabs;      // Array of your furniture sprite prefabs
+
+    // Dictionary to track instantiated furniture GameObjects
+    private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
 
     private ShopDatabase shopDatabase = new ShopDatabase();
-
-
-
 
     private PlayerData currentPlayer;
 
@@ -665,26 +667,32 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        // Clear existing home item buttons
+        // Clear existing home item BUTTONS
         foreach (Transform child in homeContent)
             Destroy(child.gameObject);
+        
+        // Clear existing SPRITES
+        foreach (var kvp in spawnedFurniture)
+            if (kvp.Value != null)
+                Destroy(kvp.Value);
+        spawnedFurniture.Clear();
 
-        // Create a button for each item in home
+        // Create a button AND sprite for each item in home
         foreach (var kvp in currentPlayer.HomeItems)
         {
-            string itemType = kvp.Key;   // "bed", "chair", etc.
-            string itemId = kvp.Value;   // "bed1", "chair2", etc.
+            string itemType = kvp.Key;
+            string itemId = kvp.Value;
 
+            // 1. Create the UI button (your existing code)
             GameObject buttonObj = Instantiate(homeItemButtonPrefab, homeContent);
-
-            // Show item name
             ShopItem item = shopDatabase.GetItem(itemId);
             string displayText = item != null ? item.Name : itemId;
             buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
-
-            // Click functionality to remove item from home back to inventory
             Button btn = buttonObj.GetComponent<Button>();
             btn.onClick.AddListener(() => ReturnItemToInventory(itemId, itemType));
+
+            // 2. Create the draggable sprite (NEW!)
+            SpawnFurnitureSprite(itemId, itemType);
         }
     }
     
@@ -718,4 +726,99 @@ public class FirebaseController : MonoBehaviour
         DisplayHomeItems();
     }
 
+    public async void SaveFurniturePosition(string itemId, string itemType, Vector2 position)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+        
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null) return;
+        
+        if (player.HomeItemPositions == null)
+            player.HomeItemPositions = new Dictionary<string, Vector2Data>();
+        
+        player.HomeItemPositions[itemId] = new Vector2Data(position.x, position.y);
+        
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+        
+        Debug.Log($"Saved position for {itemId}: {position}");
+    }
+
+    private void SpawnFurnitureSprite(string itemId, string itemType)
+    {
+        // Get the prefab for this item type
+        GameObject prefab = GetFurniturePrefab(itemType);
+        if (prefab == null)
+        {
+            Debug.LogWarning($"No prefab found for type: {itemType}");
+            return;
+        }
+        
+        // Instantiate in the furniture display area
+        GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
+        
+        // Set up the draggable component
+        DraggableFurniture draggable = furnitureObj.GetComponent<DraggableFurniture>();
+        if (draggable == null)
+            draggable = furnitureObj.AddComponent<DraggableFurniture>();
+        
+        draggable.itemId = itemId;
+        draggable.itemType = itemType;
+        draggable.firebaseController = this;
+        draggable.draggableArea = furnitureDisplayArea;
+        
+        // Load saved position or use default
+        Vector2 position = GetSavedPosition(itemId, itemType);
+        draggable.SetPosition(position);
+        
+        // Track this spawned object
+        spawnedFurniture[itemId] = furnitureObj;
+    }
+
+    // Helper to get saved position
+    private Vector2 GetSavedPosition(string itemId, string itemType)
+    {
+        if (currentPlayer.HomeItemPositions != null && 
+            currentPlayer.HomeItemPositions.TryGetValue(itemId, out Vector2Data savedPos))
+        {
+            return savedPos.ToVector2();
+        }
+        
+        // Return default position based on type
+        DraggableFurniture temp = new DraggableFurniture { itemType = itemType };
+        return temp.GetDefaultPositionForType();
+    }
+
+    // Helper to get the right prefab
+    private GameObject GetFurniturePrefab(string itemType)
+    {
+        // You'll set this up in the Inspector
+        // For now, you can use a simple naming convention
+        foreach (GameObject prefab in furniturePrefabs)
+        {
+            if (prefab.name.ToLower().Contains(itemType.ToLower()))
+                return prefab;
+        }
+        return null;
+    }
+
+}
+
+[System.Serializable]
+public class Vector2Data
+{
+    public float x;
+    public float y;
+    
+    public Vector2Data() { } // Parameterless constructor for Firestore
+    
+    public Vector2Data(float x, float y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+    
+    public Vector2 ToVector2()
+    {
+        return new Vector2(x, y);
+    }
 }

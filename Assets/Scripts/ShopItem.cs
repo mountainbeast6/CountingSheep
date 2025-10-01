@@ -3,20 +3,19 @@ using UnityEngine;
 [System.Serializable]
 public class ShopItem
 {
-    public string Id;
-    public string Name;
-    public string Type;
-    public int Cost;
-    public GameObject Prefab;
-    public Vector3 HomePosition;
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public string Type { get; set; }
+    public int Cost { get; set; }
+    public GameObject Prefab { get; set; }
+    public Vector3 HomePosition { get; set; }
+    public Sprite Icon { get; set; }
 
-    public ShopItem(string id, string name, string type, int cost, GameObject prefab = null, Vector3 homePos = default)
+    public ShopItem(string id, string name, string type, int cost)
     {
         Id = id;
         Name = name;
         Type = type;
         Cost = cost;
-        Prefab = prefab;
-        HomePosition = homePos;
     }
 }
