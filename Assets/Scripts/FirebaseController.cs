@@ -38,6 +38,19 @@ public class FirebaseController : MonoBehaviour
     public Transform inventoryContent;     // Parent object for inventory buttons
     public GameObject inventoryPanel;      // Inventory panel
 
+    [Header("Stats - Sleep Log UI")]
+    public TMP_InputField sleepHoursInput;
+    public Button logSleepButton;
+    public Transform sleepLogContent; // parent of the scrollview content
+    public GameObject sleepLogRowPrefab; // prefab row with Date, Hours, Edit button
+    public GameObject editSleepPanel;        // The popup panel
+    public TMP_InputField editHoursInput;    // Input field for hours
+    public Button editOkButton;              // OK button
+    public Button editCancelButton;          // Cancel button
+
+    private SleepLog logBeingEdited;         // Internal reference
+    public TMP_InputField sleepDateInput;
+
 
     [Header("Swap Prompt UI")]
     public GameObject swapPromptPanel;       // The panel that pops up
@@ -91,6 +104,12 @@ public class FirebaseController : MonoBehaviour
         if (swapPromptPanel != null)
             swapPromptPanel.SetActive(false);
 
+        if (logSleepButton != null)
+            logSleepButton.onClick.AddListener(LogSleep);
+
+        if (editSleepPanel != null)
+            editSleepPanel.SetActive(false);
+
         InitializeFurnitureSprites();
 
         OpenLoginPanel();
@@ -110,26 +129,26 @@ public class FirebaseController : MonoBehaviour
     void InitializeFurnitureSprites()
     {
         if (shopDatabase == null) return;
-        
+
         // Map sprites to item IDs
         for (int i = 0; i < bedSprites.Length && i < 4; i++)
         {
             if (bedSprites[i] != null)
                 shopDatabase.SetSprite($"bed{i + 1}", bedSprites[i]);
         }
-        
+
         for (int i = 0; i < chairSprites.Length && i < 4; i++)
         {
             if (chairSprites[i] != null)
                 shopDatabase.SetSprite($"chair{i + 1}", chairSprites[i]);
         }
-        
+
         for (int i = 0; i < deskSprites.Length && i < 4; i++)
         {
             if (deskSprites[i] != null)
                 shopDatabase.SetSprite($"desk{i + 1}", deskSprites[i]);
         }
-        
+
         for (int i = 0; i < lampSprites.Length && i < 4; i++)
         {
             if (lampSprites[i] != null)
@@ -187,7 +206,7 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
-        
+
         if (!string.IsNullOrEmpty(currentUserId))
         {
             currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
@@ -229,6 +248,10 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+        if (currentPlayer != null)
+        {
+            DisplaySleepLogs();
+        }
     }
 
     public void OpenSettingsPanel()
@@ -318,6 +341,7 @@ public class FirebaseController : MonoBehaviour
             profileUserEmail_Text.text = player.Email;
 
             OpenHomePanel();
+            DisplaySleepLogs();
         }
         catch (Exception ex)
         {
@@ -713,7 +737,7 @@ public class FirebaseController : MonoBehaviour
 
         // Reload fresh data from Firebase to get latest positions
         currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
-        
+
         if (currentPlayer == null || currentPlayer.HomeItems == null)
         {
             return;
@@ -722,7 +746,7 @@ public class FirebaseController : MonoBehaviour
         // Clear existing home item BUTTONS
         foreach (Transform child in homeContent)
             Destroy(child.gameObject);
-        
+
         // Clear existing SPRITES
         foreach (var kvp in spawnedFurniture)
             if (kvp.Value != null)
@@ -747,7 +771,7 @@ public class FirebaseController : MonoBehaviour
             SpawnFurnitureSprite(itemId, itemType);
         }
     }
-    
+
     public async void ReturnItemToInventory(string itemId, string itemType)
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
@@ -764,7 +788,7 @@ public class FirebaseController : MonoBehaviour
         // Add back to inventory
         if (player.Inventory == null)
             player.Inventory = new List<string>();
-        
+
         if (!player.Inventory.Contains(itemId))
             player.Inventory.Add(itemId);
 
@@ -781,17 +805,29 @@ public class FirebaseController : MonoBehaviour
     public async void SaveFurniturePosition(string itemId, string itemType, Vector2 position)
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
-        
+
         PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
         if (player == null) return;
-        
+
         if (player.HomeItemPositions == null)
             player.HomeItemPositions = new Dictionary<string, Vector2Data>();
-        
+
         player.HomeItemPositions[itemId] = new Vector2Data(position.x, position.y);
-        
+
+        // Save layer order
+        if (player.HomeItemLayers == null)
+            player.HomeItemLayers = new Dictionary<string, int>();
+
+        foreach (var kvp in spawnedFurniture)
+        {
+            if (kvp.Value != null)
+            {
+                player.HomeItemLayers[kvp.Key] = kvp.Value.transform.GetSiblingIndex();
+            }
+        }
+
         await firestoreService.SavePlayerAsync(currentUserId, player);
-        
+
         Debug.Log($"Saved position for {itemId}: {position}");
     }
 
@@ -803,9 +839,9 @@ public class FirebaseController : MonoBehaviour
             Debug.LogWarning($"No prefab found for type: {itemType}");
             return;
         }
-        
+
         GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
-        
+
         // Set the correct sprite for this specific item variant
         UnityEngine.UI.Image img = furnitureObj.GetComponent<UnityEngine.UI.Image>();
         if (img != null)
@@ -820,32 +856,39 @@ public class FirebaseController : MonoBehaviour
                 Debug.LogWarning($"No sprite found for item: {itemId}");
             }
         }
-        
+
         DraggableFurniture draggable = furnitureObj.GetComponent<DraggableFurniture>();
         if (draggable == null)
             draggable = furnitureObj.AddComponent<DraggableFurniture>();
-        
+
         draggable.itemId = itemId;
         draggable.itemType = itemType;
         draggable.firebaseController = this;
         draggable.draggableArea = furnitureDisplayArea;
-        
+
         // Load saved position or use default
         Vector2 position = GetSavedPosition(itemId, itemType);
         draggable.SetPosition(position);
-        
+
+        // NEW: Restore layer order
+        if (currentPlayer.HomeItemLayers != null &&
+            currentPlayer.HomeItemLayers.TryGetValue(itemId, out int savedLayer))
+        {
+            furnitureObj.transform.SetSiblingIndex(savedLayer);
+        }
+
         spawnedFurniture[itemId] = furnitureObj;
     }
 
     // Helper to get saved position
     private Vector2 GetSavedPosition(string itemId, string itemType)
     {
-        if (currentPlayer.HomeItemPositions != null && 
+        if (currentPlayer.HomeItemPositions != null &&
             currentPlayer.HomeItemPositions.TryGetValue(itemId, out Vector2Data savedPos))
         {
             return savedPos.ToVector2();
         }
-        
+
         // Return default position based on type
         switch (itemType.ToLower())
         {
@@ -869,6 +912,112 @@ public class FirebaseController : MonoBehaviour
             default: return null;
         }
     }
+
+    // ---------------------- Sleep Log -----------------------------------------------
+    public async void LogSleep()
+    {
+        if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
+
+        // Parse hours
+        if (!float.TryParse(sleepHoursInput.text, out float hours))
+        {
+            Debug.LogWarning("Invalid sleep hours input.");
+            return;
+        }
+
+        // Parse date from input, default to today if empty
+        DateTime selectedDate;
+        if (string.IsNullOrEmpty(sleepDateInput.text))
+            selectedDate = DateTime.Today;
+        else if (!DateTime.TryParse(sleepDateInput.text, out selectedDate))
+        {
+            Debug.LogWarning("Invalid date input.");
+            return;
+        }
+
+        // Prevent future dates
+        if (selectedDate > DateTime.Today)
+        {
+            Debug.LogWarning("Cannot log sleep for a future date.");
+            return;
+        }
+
+        string dateString = selectedDate.ToString("yyyy-MM-dd");
+
+        // Check if log exists for this date
+        SleepLog existing = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == dateString);
+        if (existing != null)
+        {
+            existing.Hours = hours; // overwrite
+        }
+        else
+        {
+            currentPlayer.SleepLogs.Add(new SleepLog { Date = dateString, Hours = hours });
+        }
+
+        await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+        sleepHoursInput.text = "";
+        sleepDateInput.text = "";
+        DisplaySleepLogs();
+    }
+
+    public void DisplaySleepLogs()
+    {
+        foreach (Transform child in sleepLogContent)
+            Destroy(child.gameObject);
+
+        if (currentPlayer?.SleepLogs == null) return;
+
+        foreach (var log in currentPlayer.SleepLogs.OrderByDescending(l => l.Date))
+        {
+            GameObject rowObj = Instantiate(sleepLogRowPrefab, sleepLogContent);
+            SleepLogRow row = rowObj.GetComponent<SleepLogRow>();
+
+            row.dateText.text = log.Date;
+            row.hoursText.text = $"{log.Hours} Hours";
+            row.editButton.GetComponentInChildren<TMP_Text>().text = "Edit";
+
+            row.editButton.onClick.RemoveAllListeners();
+            row.editButton.onClick.AddListener(() =>
+            {
+                OpenEditSleepPanel(log);
+            });
+        }
+    }
+
+
+    public void OpenEditSleepPanel(SleepLog log)
+    {
+        logBeingEdited = log;
+        editHoursInput.text = log.Hours.ToString();
+        editSleepPanel.SetActive(true);
+
+        editOkButton.onClick.RemoveAllListeners();
+        editOkButton.onClick.AddListener(SaveEditedSleep);
+
+        editCancelButton.onClick.RemoveAllListeners();
+        editCancelButton.onClick.AddListener(() =>
+        {
+            editSleepPanel.SetActive(false);
+            logBeingEdited = null;
+        });
+    }
+
+    public async void SaveEditedSleep()
+    {
+        if (logBeingEdited != null && float.TryParse(editHoursInput.text, out float newHours))
+        {
+            logBeingEdited.Hours = newHours;
+
+            await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+            editSleepPanel.SetActive(false);
+            DisplaySleepLogs();
+        }
+    }
+
+
 
 }
 
