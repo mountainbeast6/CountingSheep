@@ -790,6 +790,18 @@ public class FirebaseController : MonoBehaviour
         
         player.HomeItemPositions[itemId] = new Vector2Data(position.x, position.y);
         
+        // Save layer order
+        if (player.HomeItemLayers == null)
+            player.HomeItemLayers = new Dictionary<string, int>();
+        
+        foreach (var kvp in spawnedFurniture)
+        {
+            if (kvp.Value != null)
+            {
+                player.HomeItemLayers[kvp.Key] = kvp.Value.transform.GetSiblingIndex();
+            }
+        }
+        
         await firestoreService.SavePlayerAsync(currentUserId, player);
         
         Debug.Log($"Saved position for {itemId}: {position}");
@@ -833,6 +845,13 @@ public class FirebaseController : MonoBehaviour
         // Load saved position or use default
         Vector2 position = GetSavedPosition(itemId, itemType);
         draggable.SetPosition(position);
+        
+        // NEW: Restore layer order
+        if (currentPlayer.HomeItemLayers != null && 
+            currentPlayer.HomeItemLayers.TryGetValue(itemId, out int savedLayer))
+        {
+            furnitureObj.transform.SetSiblingIndex(savedLayer);
+        }
         
         spawnedFurniture[itemId] = furnitureObj;
     }

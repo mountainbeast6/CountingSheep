@@ -33,6 +33,9 @@ public class DraggableFurniture : MonoBehaviour, IBeginDragHandler, IDragHandler
         originalPosition = rectTransform.anchoredPosition;
         canvasGroup.alpha = 0.6f; // Make slightly transparent while dragging
         canvasGroup.blocksRaycasts = false;
+        
+        // Move to front by setting as last sibling in hierarchy
+        transform.SetAsLastSibling();
     }
     
     public void OnDrag(PointerEventData eventData)

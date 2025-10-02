@@ -13,4 +13,5 @@ public class PlayerData
     [FirestoreProperty] public Dictionary<string, string> HomeItems { get; set; } = new Dictionary<string, string>();
     [FirestoreProperty] public List<string> CompletedGoals { get; set; } = new List<string>();
     [FirestoreProperty] public Dictionary<string, Vector2Data> HomeItemPositions { get; set; } = new Dictionary<string, Vector2Data>();
+    [FirestoreProperty] public Dictionary<string, int> HomeItemLayers { get; set; }
 }
