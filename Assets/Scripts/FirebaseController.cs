@@ -49,6 +49,7 @@ public class FirebaseController : MonoBehaviour
     public Button editCancelButton;          // Cancel button
 
     private SleepLog logBeingEdited;         // Internal reference
+    public TMP_InputField sleepDateInput;
 
 
     [Header("Swap Prompt UI")]
@@ -917,30 +918,48 @@ public class FirebaseController : MonoBehaviour
     {
         if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
 
-        if (float.TryParse(sleepHoursInput.text, out float hours))
+        // Parse hours
+        if (!float.TryParse(sleepHoursInput.text, out float hours))
         {
-            var today = DateTime.Now.ToString("yyyy-MM-dd");
+            Debug.LogWarning("Invalid sleep hours input.");
+            return;
+        }
 
-            // Check if today's log already exists
-            SleepLog existing = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == today);
-            if (existing != null)
-            {
-                existing.Hours = hours; // overwrite
-            }
-            else
-            {
-                currentPlayer.SleepLogs.Add(new SleepLog { Date = today, Hours = hours });
-            }
+        // Parse date from input, default to today if empty
+        DateTime selectedDate;
+        if (string.IsNullOrEmpty(sleepDateInput.text))
+            selectedDate = DateTime.Today;
+        else if (!DateTime.TryParse(sleepDateInput.text, out selectedDate))
+        {
+            Debug.LogWarning("Invalid date input.");
+            return;
+        }
 
-            await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+        // Prevent future dates
+        if (selectedDate > DateTime.Today)
+        {
+            Debug.LogWarning("Cannot log sleep for a future date.");
+            return;
+        }
 
-            sleepHoursInput.text = "";
-            DisplaySleepLogs();
+        string dateString = selectedDate.ToString("yyyy-MM-dd");
+
+        // Check if log exists for this date
+        SleepLog existing = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == dateString);
+        if (existing != null)
+        {
+            existing.Hours = hours; // overwrite
         }
         else
         {
-            Debug.LogWarning("Invalid sleep hours input.");
+            currentPlayer.SleepLogs.Add(new SleepLog { Date = dateString, Hours = hours });
         }
+
+        await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+        sleepHoursInput.text = "";
+        sleepDateInput.text = "";
+        DisplaySleepLogs();
     }
 
     public void DisplaySleepLogs()
