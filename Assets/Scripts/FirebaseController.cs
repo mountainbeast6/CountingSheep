@@ -113,6 +113,8 @@ public class FirebaseController : MonoBehaviour
         InitializeFurnitureSprites();
 
         OpenLoginPanel();
+
+        CheckRememberedLogin();
     }
 
     void InitializeFirebase()
@@ -159,6 +161,25 @@ public class FirebaseController : MonoBehaviour
     public void SetPlayerData(PlayerData player)
     {
         currentPlayer = player;
+    }
+
+    private void CheckRememberedLogin()
+    {
+        if (PlayerPrefs.GetInt("RememberMe", 0) == 1)
+        {
+            string savedEmail = PlayerPrefs.GetString("SavedEmail", "");
+            string savedPassword = PlayerPrefs.GetString("SavedPassword", "");
+            
+            if (!string.IsNullOrEmpty(savedEmail) && !string.IsNullOrEmpty(savedPassword))
+            {
+                loginEmail.text = savedEmail;
+                loginPassword.text = savedPassword;
+                rememberMe.isOn = true;
+                
+                // Auto-login
+                LoginUser();
+            }
+        }
     }
 
     // -------------------- Panels --------------------
@@ -302,25 +323,20 @@ public class FirebaseController : MonoBehaviour
             showNotificationMessage("Error", "Firebase not ready yet.");
             return;
         }
-
         if (string.IsNullOrEmpty(loginEmail.text) || string.IsNullOrEmpty(loginPassword.text))
         {
             showNotificationMessage("Error", "One or more Fields Empty");
             return;
         }
-
         try
         {
             await auth.SignInWithEmailAndPasswordAsync(loginEmail.text, loginPassword.text);
-
             if (auth.CurrentUser == null)
             {
                 showNotificationMessage("Error", "Login failed. Try again.");
                 return;
             }
-
             currentUserId = auth.CurrentUser.UserId;
-
             // Load or create player data
             PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
             if (player == null)
@@ -334,14 +350,28 @@ public class FirebaseController : MonoBehaviour
                 await firestoreService.SavePlayerAsync(currentUserId, player);
             }
             SetPlayerData(player);
-
             // Update UI
             userMoney.text = player.Money.ToString();
             profileUserName_Text.text = player.Name;
             profileUserEmail_Text.text = player.Email;
-
             OpenHomePanel();
             DisplaySleepLogs();
+            
+            // Save credentials if Remember Me is checked
+            if (rememberMe.isOn)
+            {
+                PlayerPrefs.SetInt("RememberMe", 1);
+                PlayerPrefs.SetString("SavedEmail", loginEmail.text);
+                PlayerPrefs.SetString("SavedPassword", loginPassword.text);
+                PlayerPrefs.Save();
+            }
+            else
+            {
+                PlayerPrefs.SetInt("RememberMe", 0);
+                PlayerPrefs.DeleteKey("SavedEmail");
+                PlayerPrefs.DeleteKey("SavedPassword");
+                PlayerPrefs.Save();
+            }
         }
         catch (Exception ex)
         {
@@ -499,6 +529,12 @@ public class FirebaseController : MonoBehaviour
         auth.SignOut();
         profileUserEmail_Text.text = "";
         profileUserName_Text.text = "";
+        
+        PlayerPrefs.SetInt("RememberMe", 0);
+        PlayerPrefs.DeleteKey("SavedEmail");
+        PlayerPrefs.DeleteKey("SavedPassword");
+        PlayerPrefs.Save();
+        
         OpenLoginPanel();
     }
 
