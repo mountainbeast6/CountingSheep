@@ -365,6 +365,12 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
+        if (signupPassword.text != signupCPassword.text)
+        {
+            showNotificationMessage("Error", "Passwords do not match");
+            return;
+        }
+
         try
         {
             await auth.CreateUserWithEmailAndPasswordAsync(signupEmail.text, signupPassword.text);
@@ -396,6 +402,35 @@ public class FirebaseController : MonoBehaviour
             profileUserEmail_Text.text = newPlayer.Email;
 
             OpenHomePanel();
+        }
+        catch (FirebaseException ex)
+        {
+            Debug.LogError($"Signup error: {ex.Message}, ErrorCode: {ex.ErrorCode}");
+            
+            // Check the ErrorCode property
+            AuthError errorCode = (AuthError)ex.ErrorCode;
+            
+            switch (errorCode)
+            {
+                case AuthError.EmailAlreadyInUse:
+                    showNotificationMessage("Error", "This email is already registered. Please use a different email or login.");
+                    break;
+                case AuthError.WeakPassword:
+                    showNotificationMessage("Error", "Password is too weak. Please use a stronger password.");
+                    break;
+                case AuthError.InvalidEmail:
+                    showNotificationMessage("Error", "Invalid email address format.");
+                    break;
+                case AuthError.MissingEmail:
+                    showNotificationMessage("Error", "Please enter an email address.");
+                    break;
+                case AuthError.MissingPassword:
+                    showNotificationMessage("Error", "Please enter a password.");
+                    break;
+                default:
+                    showNotificationMessage("Error", "Signup failed. Please try again.");
+                    break;
+            }
         }
         catch (Exception ex)
         {
@@ -546,6 +581,10 @@ public class FirebaseController : MonoBehaviour
             }
 
             showNotificationMessage("Success", $"{item.Name} purchased!");
+
+            // Refresh shop to remove purchased item
+            if (shopPanel.activeSelf)
+                PopulateShop();
         }
         else
         {
@@ -566,6 +605,29 @@ public class FirebaseController : MonoBehaviour
         {
             ShopItem item = kvp.Value;
 
+            // Check if player already owns this item (in inventory or home)
+            bool alreadyOwned = false;
+            
+            if (currentPlayer != null)
+            {
+                // Check inventory
+                if (currentPlayer.Inventory != null && currentPlayer.Inventory.Contains(item.Id))
+                {
+                    alreadyOwned = true;
+                }
+                
+                // Check home items
+                if (currentPlayer.HomeItems != null && currentPlayer.HomeItems.ContainsValue(item.Id))
+                {
+                    alreadyOwned = true;
+                }
+            }
+
+            // Skip this item if already owned
+            if (alreadyOwned)
+                continue;
+
+            // Create shop button for items not yet owned
             GameObject buttonObj = Instantiate(shopButtonPrefab, shopContent);
 
             // Update the button text to show item name and cost
