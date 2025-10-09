@@ -670,6 +670,31 @@ public class FirebaseController : MonoBehaviour
             TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
             buttonText.text = $"{item.Name}\n${item.Cost}";
 
+            // Set the sprite if available
+            Sprite itemSprite = shopDatabase.GetSprite(item.Id);
+            if (itemSprite != null)
+            {
+                // Find or create an Image component for the sprite
+                UnityEngine.UI.Image spriteImage = null;
+                
+                // Check if there's a child object named "ItemSprite" or "Sprite"
+                Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
+                if (spriteTransform == null)
+                    spriteTransform = buttonObj.transform.Find("Sprite");
+                
+                if (spriteTransform != null)
+                {
+                    spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
+                }
+                
+                // If found, set the sprite
+                if (spriteImage != null)
+                {
+                    spriteImage.sprite = itemSprite;
+                    spriteImage.preserveAspect = true; // Maintain aspect ratio
+                }
+            }
+
             // Set up the buy button
             Button buyButton = buttonObj.GetComponent<Button>();
             string itemId = item.Id; // Capture for closure
@@ -701,7 +726,35 @@ public class FirebaseController : MonoBehaviour
 
             ShopItem item = shopDatabase.GetItem(itemId);
             string displayText = item != null ? item.Name : itemId;
-            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
+            
+            // Set the text
+            TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
+            buttonText.text = displayText;
+
+            // Set the sprite if available
+            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            if (itemSprite != null)
+            {
+                // Find or create an Image component for the sprite
+                UnityEngine.UI.Image spriteImage = null;
+                
+                // Check if there's a child object named "ItemSprite" or "Sprite"
+                Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
+                if (spriteTransform == null)
+                    spriteTransform = buttonObj.transform.Find("Sprite");
+                
+                if (spriteTransform != null)
+                {
+                    spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
+                }
+                
+                // If found, set the sprite
+                if (spriteImage != null)
+                {
+                    spriteImage.sprite = itemSprite;
+                    spriteImage.preserveAspect = true; // Maintain aspect ratio
+                }
+            }
 
             Button btn = buttonObj.GetComponent<Button>();
 
