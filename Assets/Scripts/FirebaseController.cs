@@ -546,6 +546,10 @@ public class FirebaseController : MonoBehaviour
             }
 
             showNotificationMessage("Success", $"{item.Name} purchased!");
+
+            // Refresh shop to remove purchased item
+            if (shopPanel.activeSelf)
+                PopulateShop();
         }
         else
         {
@@ -566,6 +570,29 @@ public class FirebaseController : MonoBehaviour
         {
             ShopItem item = kvp.Value;
 
+            // Check if player already owns this item (in inventory or home)
+            bool alreadyOwned = false;
+            
+            if (currentPlayer != null)
+            {
+                // Check inventory
+                if (currentPlayer.Inventory != null && currentPlayer.Inventory.Contains(item.Id))
+                {
+                    alreadyOwned = true;
+                }
+                
+                // Check home items
+                if (currentPlayer.HomeItems != null && currentPlayer.HomeItems.ContainsValue(item.Id))
+                {
+                    alreadyOwned = true;
+                }
+            }
+
+            // Skip this item if already owned
+            if (alreadyOwned)
+                continue;
+
+            // Create shop button for items not yet owned
             GameObject buttonObj = Instantiate(shopButtonPrefab, shopContent);
 
             // Update the button text to show item name and cost
