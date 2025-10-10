@@ -76,6 +76,18 @@ public class FirebaseController : MonoBehaviour
     public Sprite[] deskSprites;
     public Sprite[] lampSprites;
 
+    [Header("Audio")]
+    public AudioSource musicSource;      // For background music
+    public AudioSource sfxSource;        // For sound effects
+    public AudioClip[] backgroundMusicPlaylist;  // Array of background music clips
+    public AudioClip purchaseSound;      // Purchase sound effect
+    public AudioClip goalCompleteSound;  // Goal completion sound effect
+    public AudioClip pickUpItemSound;    // Pick up item sound effect
+    public AudioClip placeItemSound;     // Place item sound effect
+
+    private int currentSongIndex = 0;
+
+
     // Dictionary to track instantiated furniture GameObjects
     private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
 
@@ -111,6 +123,8 @@ public class FirebaseController : MonoBehaviour
             editSleepPanel.SetActive(false);
 
         InitializeFurnitureSprites();
+
+        PlayBackgroundMusic();
 
         OpenLoginPanel();
 
@@ -564,6 +578,9 @@ public class FirebaseController : MonoBehaviour
         if (goalObject != null)
             goalObject.SetActive(false);
 
+        
+        PlayGoalCompleteSound();
+
         if (!string.IsNullOrEmpty(currentUserId))
         {
             PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
@@ -605,6 +622,9 @@ public class FirebaseController : MonoBehaviour
         bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
         if (success)
         {
+            // Play purchase sound
+            PlayPurchaseSound();
+
             await firestoreService.AddItemToInventoryAsync(currentUserId, item.Id);
 
             // Refresh local player data immediately
@@ -1063,6 +1083,65 @@ public class FirebaseController : MonoBehaviour
             default: return null;
         }
     }
+
+    // ------------------------- Sounds ---------------------------------------------
+    private void PlayBackgroundMusic()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.volume = 0.3f; // Adjust volume (0.0 to 1.0)
+            musicSource.Play();
+            
+            // Start coroutine to play next song when current one finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+        }
+    }
+
+    private System.Collections.IEnumerator PlayNextSongWhenFinished()
+    {
+        // Wait until the current song finishes
+        yield return new WaitWhile(() => musicSource.isPlaying);
+
+        // Move to next song (loop back to start if at end)
+        currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
+
+        // Play next song
+        PlayBackgroundMusic();
+    }
+
+    private void PlayPurchaseSound()
+    {
+        if (sfxSource != null && purchaseSound != null)
+        {
+            sfxSource.PlayOneShot(purchaseSound);
+        }
+    }
+    
+    private void PlayGoalCompleteSound()
+    {
+        if (sfxSource != null && goalCompleteSound != null)
+        {
+            sfxSource.PlayOneShot(goalCompleteSound);
+        }
+    }
+
+    public void PlayPickUpItemSound()
+    {
+        if (sfxSource != null && pickUpItemSound != null)
+        {
+            sfxSource.PlayOneShot(pickUpItemSound);
+        }
+    }
+
+    public void PlayPlaceItemSound()
+    {
+        if (sfxSource != null && placeItemSound != null)
+        {
+            sfxSource.PlayOneShot(placeItemSound);
+        }
+    }
+
 
     // ---------------------- Sleep Log -----------------------------------------------
     public async void LogSleep()
