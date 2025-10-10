@@ -91,6 +91,9 @@ public class FirebaseController : MonoBehaviour
     public Slider volumeSlider;
     public Toggle muteMusicToggle;
     public Toggle muteSoundToggle;
+    public Button skipSongButton;
+    public Button previousSongButton;
+    public Button pausePlayButton;
 
     private int currentSongIndex = 0;
 
@@ -134,6 +137,13 @@ public class FirebaseController : MonoBehaviour
         LoadAudioSettings();
 
         PlayBackgroundMusic();
+
+        if (skipSongButton != null)
+            skipSongButton.onClick.AddListener(SkipToNextSong);
+        if (previousSongButton != null)
+            previousSongButton.onClick.AddListener(SkipToPreviousSong);
+        if (pausePlayButton != null)
+        pausePlayButton.onClick.AddListener(TogglePausePlay);
 
         OpenLoginPanel();
 
@@ -1148,14 +1158,25 @@ public class FirebaseController : MonoBehaviour
 
     private System.Collections.IEnumerator PlayNextSongWhenFinished()
     {
-        // Wait until the current song finishes
-        yield return new WaitWhile(() => musicSource.isPlaying);
+        // Wait until the current song finishes, but also check if it's paused
+        while (musicSource.isPlaying || musicSource.time > 0)
+        {
+            yield return new WaitForSeconds(0.5f); // Check every half second
+            
+            // If the song finished playing (not paused, time is 0, and not playing)
+            if (!musicSource.isPlaying && musicSource.time == 0)
+                break;
+        }
 
-        // Move to next song (loop back to start if at end)
-        currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
+        // Only move to next song if music isn't paused
+        if (!musicSource.isPlaying && musicSource.time == 0)
+        {
+            // Move to next song (loop back to start if at end)
+            currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
 
-        // Play next song
-        PlayBackgroundMusic();
+            // Play next song
+            PlayBackgroundMusic();
+        }
     }
 
     private void PlayPurchaseSound()
@@ -1244,15 +1265,105 @@ public class FirebaseController : MonoBehaviour
         // Load volume (default to 0.7 if not set)
         float savedVolume = PlayerPrefs.GetFloat("MasterVolume", 0.7f);
         volumeSlider.value = savedVolume;
-        
+
         // Load mute settings
         muteMusicToggle.isOn = PlayerPrefs.GetInt("MuteMusic", 0) == 1;
         muteSoundToggle.isOn = PlayerPrefs.GetInt("MuteSound", 0) == 1;
-        
+
         // Apply loaded settings
         OnVolumeChanged();
         OnMuteMusicChanged();
         OnMuteSoundChanged();
+    }
+
+    public void SkipToNextSong()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            // Stop current coroutine if it's running
+            StopCoroutine(nameof(PlayNextSongWhenFinished));
+
+            // Move to next song
+            currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
+
+            // Play the next song
+            musicSource.Stop();
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.Play();
+
+            // Restart the coroutine for when this song finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+
+            // Optional: Play a click sound for feedback
+            PlayClickSound();
+
+            Debug.Log($"Skipped to song {currentSongIndex + 1} of {backgroundMusicPlaylist.Length}");
+        }
+    }
+
+    public void SkipToPreviousSong()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            // Stop current coroutine if it's running
+            StopCoroutine(nameof(PlayNextSongWhenFinished));
+
+            // Move to previous song (with wrap-around)
+            currentSongIndex--;
+            if (currentSongIndex < 0)
+                currentSongIndex = backgroundMusicPlaylist.Length - 1;
+
+            // Play the previous song
+            musicSource.Stop();
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.Play();
+
+            // Restart the coroutine for when this song finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+
+            // Optional: Play a click sound for feedback
+            PlayClickSound();
+
+            Debug.Log($"Went back to song {currentSongIndex + 1} of {backgroundMusicPlaylist.Length}");
+        }
+    }
+
+    public void TogglePausePlay()
+    {
+        if (musicSource != null)
+        {
+            if (musicSource.isPlaying)
+            {
+                musicSource.Pause();
+                Debug.Log("Music paused");
+            }
+            else
+            {
+                // Check if there's a clip loaded
+                if (musicSource.clip != null)
+                {
+                    musicSource.UnPause();
+                    Debug.Log("Music resumed");
+                }
+                else
+                {
+                    // No clip loaded, start playing from beginning
+                    PlayBackgroundMusic();
+                }
+            }
+            
+            PlayClickSound();
+        }
+    }
+
+    // Display current song info
+    public string GetCurrentSongName()
+    {
+        if (backgroundMusicPlaylist != null && currentSongIndex < backgroundMusicPlaylist.Length)
+        {
+            return backgroundMusicPlaylist[currentSongIndex].name;
+        }
+        return "No song playing";
     }
 
 
