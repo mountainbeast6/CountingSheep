@@ -76,6 +76,28 @@ public class FirebaseController : MonoBehaviour
     public Sprite[] deskSprites;
     public Sprite[] lampSprites;
 
+    [Header("Audio")]
+    public AudioSource musicSource;      // For background music
+    public AudioSource sfxSource;        // For sound effects
+    public AudioClip[] backgroundMusicPlaylist;  // Array of background music clips
+    public AudioClip purchaseSound;      // Purchase sound effect
+    public AudioClip goalCompleteSound;  // Goal completion sound effect
+    public AudioClip pickUpItemSound;    // Pick up item sound effect
+    public AudioClip placeItemSound;     // Place item sound effect
+    public AudioClip clickSound;
+    public AudioClip inventorySound;
+
+    [Header("Audio Settings UI")]
+    public Slider volumeSlider;
+    public Toggle muteMusicToggle;
+    public Toggle muteSoundToggle;
+    public Button skipSongButton;
+    public Button previousSongButton;
+    public Button pausePlayButton;
+
+    private int currentSongIndex = 0;
+
+
     // Dictionary to track instantiated furniture GameObjects
     private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
 
@@ -112,7 +134,20 @@ public class FirebaseController : MonoBehaviour
 
         InitializeFurnitureSprites();
 
+        LoadAudioSettings();
+
+        PlayBackgroundMusic();
+
+        if (skipSongButton != null)
+            skipSongButton.onClick.AddListener(SkipToNextSong);
+        if (previousSongButton != null)
+            previousSongButton.onClick.AddListener(SkipToPreviousSong);
+        if (pausePlayButton != null)
+        pausePlayButton.onClick.AddListener(TogglePausePlay);
+
         OpenLoginPanel();
+
+        CheckRememberedLogin();
     }
 
     void InitializeFirebase()
@@ -161,9 +196,35 @@ public class FirebaseController : MonoBehaviour
         currentPlayer = player;
     }
 
+    private void CheckRememberedLogin()
+    {
+        if (PlayerPrefs.GetInt("RememberMe", 0) == 1)
+        {
+            string savedEmail = PlayerPrefs.GetString("SavedEmail", "");
+            string savedPassword = PlayerPrefs.GetString("SavedPassword", "");
+
+            if (!string.IsNullOrEmpty(savedEmail) && !string.IsNullOrEmpty(savedPassword))
+            {
+                loginEmail.text = savedEmail;
+                loginPassword.text = savedPassword;
+                rememberMe.isOn = true;
+
+                // Auto-login
+                LoginUser();
+            }
+        }
+    }
+
     // -------------------- Panels --------------------
+    private bool hasInitialized = false;
+    private string currentPanel = "";
+
     public void OpenLoginPanel()
     {
+        hasInitialized = false;
+
+        currentPanel = "Login";
+
         loginPanel.SetActive(true);
         signupPanel.SetActive(false);
         profilePanel.SetActive(false);
@@ -179,6 +240,8 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenSignUpPanel()
     {
+        currentPanel = "SignUp";
+
         loginPanel.SetActive(false);
         signupPanel.SetActive(true);
         profilePanel.SetActive(false);
@@ -195,6 +258,11 @@ public class FirebaseController : MonoBehaviour
 
     public async void OpenHomePanel()
     {
+
+        if (currentPanel == "Home") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Home";
+
         loginPanel.SetActive(false);
         signupPanel.SetActive(false);
         resetPasswordPanel.SetActive(false);
@@ -212,10 +280,16 @@ public class FirebaseController : MonoBehaviour
             currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
         }
         DisplayHomeItems();
+
+        hasInitialized = true;
     }
 
     public void OpenProfilePanel()
     {
+        if (currentPanel == "Profile") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Profile";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -228,6 +302,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenGoalsPanel()
     {
+        if (currentPanel == "Goals") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Goals";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(true);
@@ -240,6 +318,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenStatsPanel()
     {
+        if (currentPanel == "Stats") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Stats";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -256,6 +338,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenSettingsPanel()
     {
+        if (currentPanel == "Settings") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Settings";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -268,6 +354,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenShopPanel()
     {
+        if (currentPanel == "Shop") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Shop";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -289,6 +379,7 @@ public class FirebaseController : MonoBehaviour
 
     public void CloseNotif_Panel()
     {
+        PlayClickSound();
         notif_Title_Text.text = "";
         notif_Message_Text.text = "";
         notificationPanel.SetActive(false);
@@ -302,25 +393,20 @@ public class FirebaseController : MonoBehaviour
             showNotificationMessage("Error", "Firebase not ready yet.");
             return;
         }
-
         if (string.IsNullOrEmpty(loginEmail.text) || string.IsNullOrEmpty(loginPassword.text))
         {
             showNotificationMessage("Error", "One or more Fields Empty");
             return;
         }
-
         try
         {
             await auth.SignInWithEmailAndPasswordAsync(loginEmail.text, loginPassword.text);
-
             if (auth.CurrentUser == null)
             {
                 showNotificationMessage("Error", "Login failed. Try again.");
                 return;
             }
-
             currentUserId = auth.CurrentUser.UserId;
-
             // Load or create player data
             PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
             if (player == null)
@@ -334,14 +420,28 @@ public class FirebaseController : MonoBehaviour
                 await firestoreService.SavePlayerAsync(currentUserId, player);
             }
             SetPlayerData(player);
-
             // Update UI
             userMoney.text = player.Money.ToString();
             profileUserName_Text.text = player.Name;
             profileUserEmail_Text.text = player.Email;
-
             OpenHomePanel();
             DisplaySleepLogs();
+            
+            // Save credentials if Remember Me is checked
+            if (rememberMe.isOn)
+            {
+                PlayerPrefs.SetInt("RememberMe", 1);
+                PlayerPrefs.SetString("SavedEmail", loginEmail.text);
+                PlayerPrefs.SetString("SavedPassword", loginPassword.text);
+                PlayerPrefs.Save();
+            }
+            else
+            {
+                PlayerPrefs.SetInt("RememberMe", 0);
+                PlayerPrefs.DeleteKey("SavedEmail");
+                PlayerPrefs.DeleteKey("SavedPassword");
+                PlayerPrefs.Save();
+            }
         }
         catch (Exception ex)
         {
@@ -499,6 +599,12 @@ public class FirebaseController : MonoBehaviour
         auth.SignOut();
         profileUserEmail_Text.text = "";
         profileUserName_Text.text = "";
+        
+        PlayerPrefs.SetInt("RememberMe", 0);
+        PlayerPrefs.DeleteKey("SavedEmail");
+        PlayerPrefs.DeleteKey("SavedPassword");
+        PlayerPrefs.Save();
+        
         OpenLoginPanel();
     }
 
@@ -527,6 +633,9 @@ public class FirebaseController : MonoBehaviour
         GameObject goalObject = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
         if (goalObject != null)
             goalObject.SetActive(false);
+
+        
+        PlayGoalCompleteSound();
 
         if (!string.IsNullOrEmpty(currentUserId))
         {
@@ -569,6 +678,9 @@ public class FirebaseController : MonoBehaviour
         bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
         if (success)
         {
+            // Play purchase sound
+            PlayPurchaseSound();
+
             await firestoreService.AddItemToInventoryAsync(currentUserId, item.Id);
 
             // Refresh local player data immediately
@@ -634,6 +746,31 @@ public class FirebaseController : MonoBehaviour
             TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
             buttonText.text = $"{item.Name}\n${item.Cost}";
 
+            // Set the sprite if available
+            Sprite itemSprite = shopDatabase.GetSprite(item.Id);
+            if (itemSprite != null)
+            {
+                // Find or create an Image component for the sprite
+                UnityEngine.UI.Image spriteImage = null;
+                
+                // Check if there's a child object named "ItemSprite" or "Sprite"
+                Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
+                if (spriteTransform == null)
+                    spriteTransform = buttonObj.transform.Find("Sprite");
+                
+                if (spriteTransform != null)
+                {
+                    spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
+                }
+                
+                // If found, set the sprite
+                if (spriteImage != null)
+                {
+                    spriteImage.sprite = itemSprite;
+                    spriteImage.preserveAspect = true; // Maintain aspect ratio
+                }
+            }
+
             // Set up the buy button
             Button buyButton = buttonObj.GetComponent<Button>();
             string itemId = item.Id; // Capture for closure
@@ -651,6 +788,7 @@ public class FirebaseController : MonoBehaviour
             inventoryPanel.SetActive(true); // show empty panel
             return;
         }
+        PlayInventorySound();
 
         inventoryPanel.SetActive(true);
 
@@ -665,7 +803,35 @@ public class FirebaseController : MonoBehaviour
 
             ShopItem item = shopDatabase.GetItem(itemId);
             string displayText = item != null ? item.Name : itemId;
-            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
+            
+            // Set the text
+            TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
+            buttonText.text = displayText;
+
+            // Set the sprite if available
+            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            if (itemSprite != null)
+            {
+                // Find or create an Image component for the sprite
+                UnityEngine.UI.Image spriteImage = null;
+                
+                // Check if there's a child object named "ItemSprite" or "Sprite"
+                Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
+                if (spriteTransform == null)
+                    spriteTransform = buttonObj.transform.Find("Sprite");
+                
+                if (spriteTransform != null)
+                {
+                    spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
+                }
+                
+                // If found, set the sprite
+                if (spriteImage != null)
+                {
+                    spriteImage.sprite = itemSprite;
+                    spriteImage.preserveAspect = true; // Maintain aspect ratio
+                }
+            }
 
             Button btn = buttonObj.GetComponent<Button>();
 
@@ -691,6 +857,7 @@ public class FirebaseController : MonoBehaviour
 
     public void CloseInventory()
     {
+        PlayClickSound();
         inventoryPanel.SetActive(false);
 
         foreach (Transform child in inventoryContent)
@@ -974,6 +1141,231 @@ public class FirebaseController : MonoBehaviour
             default: return null;
         }
     }
+
+    // ------------------------- Sounds ---------------------------------------------
+    private void PlayBackgroundMusic()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.volume = 0.3f; // Adjust volume (0.0 to 1.0)
+            musicSource.Play();
+            
+            // Start coroutine to play next song when current one finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+        }
+    }
+
+    private System.Collections.IEnumerator PlayNextSongWhenFinished()
+    {
+        // Wait until the current song finishes, but also check if it's paused
+        while (musicSource.isPlaying || musicSource.time > 0)
+        {
+            yield return new WaitForSeconds(0.5f); // Check every half second
+            
+            // If the song finished playing (not paused, time is 0, and not playing)
+            if (!musicSource.isPlaying && musicSource.time == 0)
+                break;
+        }
+
+        // Only move to next song if music isn't paused
+        if (!musicSource.isPlaying && musicSource.time == 0)
+        {
+            // Move to next song (loop back to start if at end)
+            currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
+
+            // Play next song
+            PlayBackgroundMusic();
+        }
+    }
+
+    private void PlayPurchaseSound()
+    {
+        if (sfxSource != null && purchaseSound != null)
+        {
+            sfxSource.PlayOneShot(purchaseSound);
+        }
+    }
+    
+    private void PlayGoalCompleteSound()
+    {
+        if (sfxSource != null && goalCompleteSound != null)
+        {
+            sfxSource.PlayOneShot(goalCompleteSound);
+        }
+    }
+
+    public void PlayPickUpItemSound()
+    {
+        if (sfxSource != null && pickUpItemSound != null)
+        {
+            sfxSource.PlayOneShot(pickUpItemSound);
+        }
+    }
+
+    public void PlayPlaceItemSound()
+    {
+        if (sfxSource != null && placeItemSound != null)
+        {
+            sfxSource.PlayOneShot(placeItemSound);
+        }
+    }
+
+    public void PlayClickSound()
+    {
+        if (sfxSource != null && clickSound != null)
+        {
+            sfxSource.PlayOneShot(clickSound);
+        }
+    }
+
+    public void PlayInventorySound()
+    {
+        if (sfxSource != null && inventorySound != null)
+        {
+            sfxSource.PlayOneShot(inventorySound);
+        }
+    }
+
+    public void OnVolumeChanged()
+    {
+        if (musicSource != null)
+            musicSource.volume = volumeSlider.value;
+        
+        if (sfxSource != null)
+            sfxSource.volume = volumeSlider.value;
+        
+        // Save setting
+        PlayerPrefs.SetFloat("MasterVolume", volumeSlider.value);
+        PlayerPrefs.Save();
+    }
+
+    public void OnMuteMusicChanged()
+    {
+        if (musicSource != null)
+            musicSource.mute = muteMusicToggle.isOn;
+        
+        // Save setting
+        PlayerPrefs.SetInt("MuteMusic", muteMusicToggle.isOn ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+
+    public void OnMuteSoundChanged()
+    {
+        if (sfxSource != null)
+            sfxSource.mute = muteSoundToggle.isOn;
+        
+        // Save setting
+        PlayerPrefs.SetInt("MuteSound", muteSoundToggle.isOn ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+
+    private void LoadAudioSettings()
+    {
+        // Load volume (default to 0.7 if not set)
+        float savedVolume = PlayerPrefs.GetFloat("MasterVolume", 0.7f);
+        volumeSlider.value = savedVolume;
+
+        // Load mute settings
+        muteMusicToggle.isOn = PlayerPrefs.GetInt("MuteMusic", 0) == 1;
+        muteSoundToggle.isOn = PlayerPrefs.GetInt("MuteSound", 0) == 1;
+
+        // Apply loaded settings
+        OnVolumeChanged();
+        OnMuteMusicChanged();
+        OnMuteSoundChanged();
+    }
+
+    public void SkipToNextSong()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            // Stop current coroutine if it's running
+            StopCoroutine(nameof(PlayNextSongWhenFinished));
+
+            // Move to next song
+            currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
+
+            // Play the next song
+            musicSource.Stop();
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.Play();
+
+            // Restart the coroutine for when this song finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+
+            // Optional: Play a click sound for feedback
+            PlayClickSound();
+
+            Debug.Log($"Skipped to song {currentSongIndex + 1} of {backgroundMusicPlaylist.Length}");
+        }
+    }
+
+    public void SkipToPreviousSong()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            // Stop current coroutine if it's running
+            StopCoroutine(nameof(PlayNextSongWhenFinished));
+
+            // Move to previous song (with wrap-around)
+            currentSongIndex--;
+            if (currentSongIndex < 0)
+                currentSongIndex = backgroundMusicPlaylist.Length - 1;
+
+            // Play the previous song
+            musicSource.Stop();
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.Play();
+
+            // Restart the coroutine for when this song finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+
+            // Optional: Play a click sound for feedback
+            PlayClickSound();
+
+            Debug.Log($"Went back to song {currentSongIndex + 1} of {backgroundMusicPlaylist.Length}");
+        }
+    }
+
+    public void TogglePausePlay()
+    {
+        if (musicSource != null)
+        {
+            if (musicSource.isPlaying)
+            {
+                musicSource.Pause();
+                Debug.Log("Music paused");
+            }
+            else
+            {
+                // Check if there's a clip loaded
+                if (musicSource.clip != null)
+                {
+                    musicSource.UnPause();
+                    Debug.Log("Music resumed");
+                }
+                else
+                {
+                    // No clip loaded, start playing from beginning
+                    PlayBackgroundMusic();
+                }
+            }
+            
+            PlayClickSound();
+        }
+    }
+
+    // Display current song info
+    public string GetCurrentSongName()
+    {
+        if (backgroundMusicPlaylist != null && currentSongIndex < backgroundMusicPlaylist.Length)
+        {
+            return backgroundMusicPlaylist[currentSongIndex].name;
+        }
+        return "No song playing";
+    }
+
 
     // ---------------------- Sleep Log -----------------------------------------------
     public async void LogSleep()

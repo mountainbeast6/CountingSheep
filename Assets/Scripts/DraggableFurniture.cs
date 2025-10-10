@@ -30,12 +30,16 @@ public class DraggableFurniture : MonoBehaviour, IBeginDragHandler, IDragHandler
     
     public void OnBeginDrag(PointerEventData eventData)
     {
+        if (firebaseController != null)
+            firebaseController.PlayPickUpItemSound();
+
         originalPosition = rectTransform.anchoredPosition;
         canvasGroup.alpha = 0.6f; // Make slightly transparent while dragging
         canvasGroup.blocksRaycasts = false;
         
         // Move to front by setting as last sibling in hierarchy
         transform.SetAsLastSibling();
+        
     }
     
     public void OnDrag(PointerEventData eventData)
@@ -63,6 +67,9 @@ public class DraggableFurniture : MonoBehaviour, IBeginDragHandler, IDragHandler
     {
         canvasGroup.alpha = 1f;
         canvasGroup.blocksRaycasts = true;
+        
+        if (firebaseController != null)
+            firebaseController.PlayPlaceItemSound();
         
         // Save position to Firebase
         SavePosition();
