@@ -84,6 +84,8 @@ public class FirebaseController : MonoBehaviour
     public AudioClip goalCompleteSound;  // Goal completion sound effect
     public AudioClip pickUpItemSound;    // Pick up item sound effect
     public AudioClip placeItemSound;     // Place item sound effect
+    public AudioClip clickSound;
+    public AudioClip inventorySound;
 
     private int currentSongIndex = 0;
 
@@ -183,13 +185,13 @@ public class FirebaseController : MonoBehaviour
         {
             string savedEmail = PlayerPrefs.GetString("SavedEmail", "");
             string savedPassword = PlayerPrefs.GetString("SavedPassword", "");
-            
+
             if (!string.IsNullOrEmpty(savedEmail) && !string.IsNullOrEmpty(savedPassword))
             {
                 loginEmail.text = savedEmail;
                 loginPassword.text = savedPassword;
                 rememberMe.isOn = true;
-                
+
                 // Auto-login
                 LoginUser();
             }
@@ -197,8 +199,15 @@ public class FirebaseController : MonoBehaviour
     }
 
     // -------------------- Panels --------------------
+    private bool hasInitialized = false;
+    private string currentPanel = "";
+
     public void OpenLoginPanel()
     {
+        hasInitialized = false;
+
+        currentPanel = "Login";
+
         loginPanel.SetActive(true);
         signupPanel.SetActive(false);
         profilePanel.SetActive(false);
@@ -214,6 +223,8 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenSignUpPanel()
     {
+        currentPanel = "SignUp";
+
         loginPanel.SetActive(false);
         signupPanel.SetActive(true);
         profilePanel.SetActive(false);
@@ -230,6 +241,11 @@ public class FirebaseController : MonoBehaviour
 
     public async void OpenHomePanel()
     {
+
+        if (currentPanel == "Home") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Home";
+
         loginPanel.SetActive(false);
         signupPanel.SetActive(false);
         resetPasswordPanel.SetActive(false);
@@ -247,10 +263,16 @@ public class FirebaseController : MonoBehaviour
             currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
         }
         DisplayHomeItems();
+
+        hasInitialized = true;
     }
 
     public void OpenProfilePanel()
     {
+        if (currentPanel == "Profile") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Profile";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -263,6 +285,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenGoalsPanel()
     {
+        if (currentPanel == "Goals") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Goals";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(true);
@@ -275,6 +301,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenStatsPanel()
     {
+        if (currentPanel == "Stats") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Stats";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -291,6 +321,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenSettingsPanel()
     {
+        if (currentPanel == "Settings") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Settings";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -303,6 +337,10 @@ public class FirebaseController : MonoBehaviour
 
     public void OpenShopPanel()
     {
+        if (currentPanel == "Shop") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Shop";
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -324,6 +362,7 @@ public class FirebaseController : MonoBehaviour
 
     public void CloseNotif_Panel()
     {
+        PlayClickSound();
         notif_Title_Text.text = "";
         notif_Message_Text.text = "";
         notificationPanel.SetActive(false);
@@ -732,6 +771,7 @@ public class FirebaseController : MonoBehaviour
             inventoryPanel.SetActive(true); // show empty panel
             return;
         }
+        PlayInventorySound();
 
         inventoryPanel.SetActive(true);
 
@@ -1139,6 +1179,22 @@ public class FirebaseController : MonoBehaviour
         if (sfxSource != null && placeItemSound != null)
         {
             sfxSource.PlayOneShot(placeItemSound);
+        }
+    }
+
+    public void PlayClickSound()
+    {
+        if (sfxSource != null && clickSound != null)
+        {
+            sfxSource.PlayOneShot(clickSound);
+        }
+    }
+
+    public void PlayInventorySound()
+    {
+        if (sfxSource != null && inventorySound != null)
+        {
+            sfxSource.PlayOneShot(inventorySound);
         }
     }
 
