@@ -87,6 +87,11 @@ public class FirebaseController : MonoBehaviour
     public AudioClip clickSound;
     public AudioClip inventorySound;
 
+    [Header("Audio Settings UI")]
+    public Slider volumeSlider;
+    public Toggle muteMusicToggle;
+    public Toggle muteSoundToggle;
+
     private int currentSongIndex = 0;
 
 
@@ -125,6 +130,8 @@ public class FirebaseController : MonoBehaviour
             editSleepPanel.SetActive(false);
 
         InitializeFurnitureSprites();
+
+        LoadAudioSettings();
 
         PlayBackgroundMusic();
 
@@ -840,6 +847,7 @@ public class FirebaseController : MonoBehaviour
 
     public void CloseInventory()
     {
+        PlayClickSound();
         inventoryPanel.SetActive(false);
 
         foreach (Transform child in inventoryContent)
@@ -1196,6 +1204,55 @@ public class FirebaseController : MonoBehaviour
         {
             sfxSource.PlayOneShot(inventorySound);
         }
+    }
+
+    public void OnVolumeChanged()
+    {
+        if (musicSource != null)
+            musicSource.volume = volumeSlider.value;
+        
+        if (sfxSource != null)
+            sfxSource.volume = volumeSlider.value;
+        
+        // Save setting
+        PlayerPrefs.SetFloat("MasterVolume", volumeSlider.value);
+        PlayerPrefs.Save();
+    }
+
+    public void OnMuteMusicChanged()
+    {
+        if (musicSource != null)
+            musicSource.mute = muteMusicToggle.isOn;
+        
+        // Save setting
+        PlayerPrefs.SetInt("MuteMusic", muteMusicToggle.isOn ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+
+    public void OnMuteSoundChanged()
+    {
+        if (sfxSource != null)
+            sfxSource.mute = muteSoundToggle.isOn;
+        
+        // Save setting
+        PlayerPrefs.SetInt("MuteSound", muteSoundToggle.isOn ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+
+    private void LoadAudioSettings()
+    {
+        // Load volume (default to 0.7 if not set)
+        float savedVolume = PlayerPrefs.GetFloat("MasterVolume", 0.7f);
+        volumeSlider.value = savedVolume;
+        
+        // Load mute settings
+        muteMusicToggle.isOn = PlayerPrefs.GetInt("MuteMusic", 0) == 1;
+        muteSoundToggle.isOn = PlayerPrefs.GetInt("MuteSound", 0) == 1;
+        
+        // Apply loaded settings
+        OnVolumeChanged();
+        OnMuteMusicChanged();
+        OnMuteSoundChanged();
     }
 
 
