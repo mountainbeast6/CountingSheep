@@ -128,8 +128,8 @@ public class FirebaseController : MonoBehaviour
 
         if (logSleepButton != null)
         {
-            logSleepButton.onClick.RemoveAllListeners(); // Clear any existing listeners
-            logSleepButton.onClick.AddListener(() => LogSleep()); // Use lambda wrapper
+            logSleepButton.onClick.RemoveAllListeners(); 
+            logSleepButton.onClick.AddListener(() => LogSleep());
             Debug.Log("Sleep log button listener added");
         }
         else
@@ -1388,14 +1388,13 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        // Validate hours (optional - reasonable range)
+        // Validate hours 
         if (hours < 0 || hours > 24)
         {
             showNotificationMessage("Error", "Sleep hours must be between 0 and 24.");
             return;
         }
 
-        // Always use today's date since date input was removed
         DateTime selectedDate = DateTime.Today;
         string dateString = selectedDate.ToString("yyyy-MM-dd");
 
