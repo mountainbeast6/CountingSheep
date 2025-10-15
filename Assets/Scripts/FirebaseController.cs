@@ -97,6 +97,14 @@ public class FirebaseController : MonoBehaviour
 
     private int currentSongIndex = 0;
 
+    [Header("Sleep Graph UI")]
+    public GameObject sleepGraphPanel;       // The panel that contains the graph
+    public Transform graphContainer;         // Parent container for the bars
+    public GameObject barPrefab;             // Prefab for each bar (Image + Text)
+    public float maxBarHeight = 200f;        // Maximum height of bars in pixels
+    public Button openGraphButton;           // Button to open the graph
+    public Button closeGraphButton;          // Button to close the graph
+
 
     // Dictionary to track instantiated furniture GameObjects
     private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
@@ -139,6 +147,15 @@ public class FirebaseController : MonoBehaviour
 
         if (editSleepPanel != null)
             editSleepPanel.SetActive(false);
+
+        if (sleepGraphPanel != null)
+            sleepGraphPanel.SetActive(false);
+
+        if (openGraphButton != null)
+            openGraphButton.onClick.AddListener(OpenSleepGraph);
+
+        if (closeGraphButton != null)
+            closeGraphButton.onClick.AddListener(CloseSleepGraph);
 
         InitializeFurnitureSprites();
 
@@ -1468,6 +1485,86 @@ public class FirebaseController : MonoBehaviour
 
             editSleepPanel.SetActive(false);
             DisplaySleepLogs();
+        }
+    }
+
+    public void OpenSleepGraph()
+    {
+        PlayClickSound();
+        if (sleepGraphPanel != null)
+        {
+            sleepGraphPanel.SetActive(true);
+            UpdateSleepGraph(); // Update the graph when opening
+        }
+    }
+
+    public void CloseSleepGraph()
+    {
+        PlayClickSound();
+        if (sleepGraphPanel != null)
+        {
+            sleepGraphPanel.SetActive(false);
+        }
+    }
+
+    public void UpdateSleepGraph()
+    {
+        if (graphContainer == null || barPrefab == null) return;
+
+        // Clear existing bars
+        foreach (Transform child in graphContainer)
+            Destroy(child.gameObject);
+
+        if (currentPlayer?.SleepLogs == null || currentPlayer.SleepLogs.Count == 0) return;
+
+        // Get last 7 days of data
+        DateTime today = DateTime.Today;
+        string[] dayNames = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+
+        for (int i = 6; i >= 0; i--)
+        {
+            DateTime date = today.AddDays(-i);
+            string dateString = date.ToString("yyyy-MM-dd");
+            string dayName = dayNames[(int)date.DayOfWeek];
+
+            // Find sleep data for this date
+            SleepLog log = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == dateString);
+            float hours = log?.Hours ?? 0f;
+
+            // Create bar
+            GameObject barObj = Instantiate(barPrefab, graphContainer);
+            
+            // Set bar height (assuming 8 hours = max height)
+            RectTransform barRect = barObj.transform.Find("Bar")?.GetComponent<RectTransform>();
+            if (barRect != null)
+            {
+                float heightPercent = Mathf.Clamp01(hours / 8f); // 8 hours = 100%
+                barRect.sizeDelta = new Vector2(barRect.sizeDelta.x, maxBarHeight * heightPercent);
+            }
+
+            // Set day label
+            TMP_Text dayLabel = barObj.transform.Find("DayLabel")?.GetComponent<TMP_Text>();
+            if (dayLabel != null)
+                dayLabel.text = dayName;
+
+            // Set hours label
+            TMP_Text hoursLabel = barObj.transform.Find("HoursLabel")?.GetComponent<TMP_Text>();
+            if (hoursLabel != null)
+                hoursLabel.text = hours > 0 ? $"{hours}h" : "";
+
+            // Optional: Color code the bar based on hours
+            UnityEngine.UI.Image barImage = barObj.transform.Find("Bar")?.GetComponent<UnityEngine.UI.Image>();
+            if (barImage != null)
+            {
+                if (hours >= 7 && hours <= 9)
+                    barImage.color = new Color(0.3f, 0.8f, 0.3f); // Green - good sleep
+                else if (hours >= 6 && hours < 7)
+                    barImage.color = new Color(0.9f, 0.8f, 0.2f); // Yellow - okay sleep
+                else if (hours > 0)
+                    barImage.color = new Color(0.9f, 0.3f, 0.3f); // Red - poor sleep
+                else
+                    barImage.color = new Color(0.5f, 0.5f, 0.5f); // Gray - no data
+            }
         }
     }
 
