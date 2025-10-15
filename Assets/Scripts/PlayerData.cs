@@ -16,6 +16,8 @@ public class PlayerData
     [FirestoreProperty] public Dictionary<string, int> HomeItemLayers { get; set; }
     [FirestoreProperty] public List<SleepLog> SleepLogs { get; set; } = new List<SleepLog>();
     [FirestoreProperty] public List<CustomGoal> CustomGoals { get; set; }
+    [FirestoreProperty] public int SleepLogStreak { get; set; } = 0;
+    [FirestoreProperty] public string LastSleepLogDate { get; set; } = "";
 }
 
 [FirestoreData]

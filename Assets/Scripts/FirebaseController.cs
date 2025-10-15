@@ -365,6 +365,7 @@ public class FirebaseController : MonoBehaviour
         inventoryPanel.SetActive(false);
         if (currentPlayer != null)
         {
+            RecalculateSleepStreak();
             DisplaySleepLogs();
         }
     }
@@ -452,6 +453,14 @@ public class FirebaseController : MonoBehaviour
                 };
                 await firestoreService.SavePlayerAsync(currentUserId, player);
             }
+
+            if (player.SleepLogs != null && player.SleepLogs.Count > 0)
+            {
+                RecalculateSleepStreak();
+                // Save the recalculated streak
+                await firestoreService.SavePlayerAsync(currentUserId, player);
+            }
+            
             SetPlayerData(player);
             // Update UI
             userMoney.text = player.Money.ToString();
@@ -1382,6 +1391,9 @@ public class FirebaseController : MonoBehaviour
         else
         {
             currentPlayer.SleepLogs.Add(new SleepLog { Date = dateString, Hours = hours });
+
+            // Update sleep streak
+            UpdateSleepStreak(dateString);
         }
 
         await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
@@ -1389,6 +1401,108 @@ public class FirebaseController : MonoBehaviour
         sleepHoursInput.text = "";
         showNotificationMessage("Success", $"Logged {hours} hours of sleep for today!");
         DisplaySleepLogs();
+
+        // Refresh goals to update streak display
+        GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
+        if (goalsManager != null)
+        {
+            goalsManager.DisplayGoals();
+        }
+    }
+
+    private void UpdateSleepStreak(string currentDate)
+    {
+        if (string.IsNullOrEmpty(currentPlayer.LastSleepLogDate))
+        {
+            // First time logging sleep
+            currentPlayer.SleepLogStreak = 1;
+            currentPlayer.LastSleepLogDate = currentDate;
+            return;
+        }
+
+        DateTime lastDate = DateTime.Parse(currentPlayer.LastSleepLogDate);
+        DateTime currentDateTime = DateTime.Parse(currentDate);
+
+        // Check if we already logged sleep today
+        bool alreadyLoggedToday = currentPlayer.SleepLogs.Any(log => log.Date == currentDate && log.Hours > 0);
+
+        if (alreadyLoggedToday && currentDate == currentPlayer.LastSleepLogDate)
+        {
+            // Already logged today, don't change streak
+            return;
+        }
+
+        TimeSpan difference = currentDateTime - lastDate;
+
+        if (difference.Days == 1)
+        {
+            // Consecutive day - increment streak
+            currentPlayer.SleepLogStreak++;
+            Debug.Log($"Streak increased to: {currentPlayer.SleepLogStreak}");
+        }
+        else if (difference.Days == 0)
+        {
+            // Same day - don't change streak
+            // This handles multiple logs on the same day
+        }
+        else
+        {
+            // Streak broken (gap of 2+ days) - reset to 1
+            currentPlayer.SleepLogStreak = 1;
+            Debug.Log($"Streak reset to: {currentPlayer.SleepLogStreak}");
+        }
+
+        currentPlayer.LastSleepLogDate = currentDate;
+        Debug.Log($"Sleep streak updated: {currentPlayer.SleepLogStreak} days, last date: {currentPlayer.LastSleepLogDate}");
+    }
+    
+    public void RecalculateSleepStreak()
+    {
+        if (currentPlayer?.SleepLogs == null || currentPlayer.SleepLogs.Count == 0)
+        {
+            currentPlayer.SleepLogStreak = 0;
+            currentPlayer.LastSleepLogDate = "";
+            return;
+        }
+
+        // Sort logs by date
+        var sortedLogs = currentPlayer.SleepLogs
+            .Where(log => !string.IsNullOrEmpty(log.Date) && log.Hours > 0)
+            .OrderBy(log => log.Date)
+            .ToList();
+
+        if (sortedLogs.Count == 0)
+        {
+            currentPlayer.SleepLogStreak = 0;
+            currentPlayer.LastSleepLogDate = "";
+            return;
+        }
+
+        int streak = 1;
+        string lastDate = sortedLogs.Last().Date;
+
+        // Calculate consecutive days from most recent
+        for (int i = sortedLogs.Count - 1; i > 0; i--)
+        {
+            DateTime currentDay = DateTime.Parse(sortedLogs[i].Date);
+            DateTime previousDay = DateTime.Parse(sortedLogs[i - 1].Date);
+            TimeSpan difference = currentDay - previousDay;
+
+            if (difference.Days == 1)
+            {
+                streak++;
+            }
+            else if (difference.Days > 1)
+            {
+                break; // Streak broken
+            }
+            // If same day, continue without breaking streak
+        }
+
+        currentPlayer.SleepLogStreak = streak;
+        currentPlayer.LastSleepLogDate = lastDate;
+        
+        Debug.Log($"Recalculated streak: {currentPlayer.SleepLogStreak} days");
     }
 
     public void DisplaySleepLogs()

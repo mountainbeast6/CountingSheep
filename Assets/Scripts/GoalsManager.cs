@@ -81,14 +81,23 @@ public class GoalsManager : MonoBehaviour
             IsDaily = true  // Predefined goals are daily by default
         });
 
-        allGoals.Add(new Goal 
-        { 
-            Id = "workout_goal", 
-            Name = "Workout for 30 mins", 
-            Reward = 100, 
+        allGoals.Add(new Goal
+        {
+            Id = "workout_goal",
+            Name = "Workout for 30 mins",
+            Reward = 100,
             IsCompleted = false,
             IsPredefined = true,
             IsDaily = true  // Predefined goals are daily by default
+        });
+        allGoals.Add(new Goal 
+        { 
+            Id = "sleep_streak_goal", 
+            Name = "Log sleep for 5 consecutive days", 
+            Reward = 200, 
+            IsCompleted = false,
+            IsPredefined = true,
+            IsDaily = false  // This is a streak goal, not daily
         });
     }
 
@@ -224,10 +233,47 @@ public class GoalsManager : MonoBehaviour
         Toggle completeToggle = goalObj.transform.Find("CompleteGoal")?.GetComponent<Toggle>();
         TMP_Text rewardText = goalObj.transform.Find("RewardText")?.GetComponent<TMP_Text>();
         TMP_Text dailyBadge = goalObj.transform.Find("DailyBadge")?.GetComponent<TMP_Text>();
+        TMP_Text progressText = goalObj.transform.Find("ProgressText")?.GetComponent<TMP_Text>(); // Add this UI element
         
-        // Set the goal name text
-        if (goalNameText != null)
-            goalNameText.text = goal.Name;
+        // Special handling for sleep streak goal
+        if (goal.Id == "sleep_streak_goal" && firebaseController?.currentPlayer != null)
+        {
+            int currentStreak = firebaseController.currentPlayer.SleepLogStreak;
+            int requiredStreak = 5;
+            
+            // Update goal name to show progress
+            if (goalNameText != null)
+                goalNameText.text = $"{goal.Name} ({currentStreak}/{requiredStreak})";
+            
+            // Show progress text if available
+            if (progressText != null)
+            {
+                progressText.gameObject.SetActive(true);
+                progressText.text = $"{currentStreak}/{requiredStreak} days";
+            }
+            
+            // Only enable toggle if streak is complete
+            if (completeToggle != null)
+            {
+                completeToggle.interactable = currentStreak >= requiredStreak && !goal.IsCompleted;
+                completeToggle.isOn = goal.IsCompleted;
+            }
+        }
+        else
+        {
+            // Normal goal handling
+            if (goalNameText != null)
+                goalNameText.text = goal.Name;
+
+            if (progressText != null)
+                progressText.gameObject.SetActive(false);
+                
+            if (completeToggle != null)
+            {
+                completeToggle.interactable = !goal.IsCompleted;
+                completeToggle.isOn = goal.IsCompleted;
+            }
+        }
 
         // Set reward text
         if (rewardText != null)
@@ -241,13 +287,9 @@ public class GoalsManager : MonoBehaviour
                 dailyBadge.text = "DAILY";
         }
 
-        // Set up the toggle
+        // Set up the toggle listener
         if (completeToggle != null)
         {
-            // Set the toggle state based on completion status
-            completeToggle.isOn = goal.IsCompleted;
-            
-            // Set up toggle listener
             completeToggle.onValueChanged.RemoveAllListeners();
             completeToggle.onValueChanged.AddListener((isOn) => {
                 if (isOn && !goal.IsCompleted)
