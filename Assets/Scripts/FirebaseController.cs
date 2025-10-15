@@ -105,13 +105,12 @@ public class FirebaseController : MonoBehaviour
     public Button openGraphButton;           // Button to open the graph
     public Button closeGraphButton;          // Button to close the graph
 
-
     // Dictionary to track instantiated furniture GameObjects
     private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
 
     private ShopDatabase shopDatabase = new ShopDatabase();
 
-    private PlayerData currentPlayer;
+    public PlayerData currentPlayer;
 
     private async void Start()
     {
@@ -136,7 +135,7 @@ public class FirebaseController : MonoBehaviour
 
         if (logSleepButton != null)
         {
-            logSleepButton.onClick.RemoveAllListeners(); 
+            logSleepButton.onClick.RemoveAllListeners();
             logSleepButton.onClick.AddListener(() => LogSleep());
             Debug.Log("Sleep log button listener added");
         }
@@ -144,6 +143,8 @@ public class FirebaseController : MonoBehaviour
         {
             Debug.LogError("logSleepButton is not assigned in the Inspector!");
         }
+        
+        // ------------------------- Hide Panels -------------------------------
 
         if (editSleepPanel != null)
             editSleepPanel.SetActive(false);
@@ -339,6 +340,13 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+
+        // Find GoalsManager and display goals
+        GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
+        if (goalsManager != null)
+        {
+            goalsManager.DisplayGoals();
+        }
     }
 
     public void OpenStatsPanel()
@@ -395,7 +403,7 @@ public class FirebaseController : MonoBehaviour
     }
 
     // -------------------- Notifications --------------------
-    private void showNotificationMessage(string title, string message)
+    public void showNotificationMessage(string title, string message)
     {
         notif_Title_Text.text = title;
         notif_Message_Text.text = message;
@@ -631,56 +639,6 @@ public class FirebaseController : MonoBehaviour
         PlayerPrefs.Save();
         
         OpenLoginPanel();
-    }
-
-    // -------------------- Goals / Money --------------------
-    // Goal 1
-    public void CompleteGoal1()
-    {
-        CompleteGoal("goal1", 50);
-    }
-
-    // Goal 2
-    public void CompleteGoal2()
-    {
-        CompleteGoal("goal2", 100);
-    }
-
-    // Goal 3
-    public void CompleteGoal3()
-    {
-        CompleteGoal("goal3", 200);
-    }
-
-    public async void CompleteGoal(string goalId, int moneyEarned)
-    {
-        // Hide the button immediately
-        GameObject goalObject = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
-        if (goalObject != null)
-            goalObject.SetActive(false);
-
-        
-        PlayGoalCompleteSound();
-
-        if (!string.IsNullOrEmpty(currentUserId))
-        {
-            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
-
-            // Add money
-            player.Money += moneyEarned;
-
-            // Mark goal as completed
-            if (player.CompletedGoals == null)
-                player.CompletedGoals = new List<string>();
-
-            if (!player.CompletedGoals.Contains(goalId))
-                player.CompletedGoals.Add(goalId);
-
-            await firestoreService.SavePlayerAsync(currentUserId, player);
-
-            // Update UI
-            userMoney.text = player.Money.ToString();
-        }
     }
 
     // -----------------SHOP-------------------------------------
@@ -1567,9 +1525,6 @@ public class FirebaseController : MonoBehaviour
             }
         }
     }
-
-
-
 }
 
 [System.Serializable]
@@ -1578,20 +1533,37 @@ public class Vector2Data
 {
     [Firebase.Firestore.FirestoreProperty]
     public float x { get; set; }
-    
+
     [Firebase.Firestore.FirestoreProperty]
     public float y { get; set; }
-    
+
     public Vector2Data() { }
-    
+
     public Vector2Data(float x, float y)
     {
         this.x = x;
         this.y = y;
     }
-    
+
     public Vector2 ToVector2()
     {
         return new Vector2(x, y);
     }
+}
+
+[System.Serializable]
+[Firebase.Firestore.FirestoreData]
+public class CustomGoal
+{
+    [Firebase.Firestore.FirestoreProperty]
+    public string Id { get; set; }
+    
+    [Firebase.Firestore.FirestoreProperty]
+    public string Name { get; set; }
+    
+    [Firebase.Firestore.FirestoreProperty]
+    public int Reward { get; set; }
+    
+    [Firebase.Firestore.FirestoreProperty]
+    public bool IsCompleted { get; set; }
 }

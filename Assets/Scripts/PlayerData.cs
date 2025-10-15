@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Firebase.Firestore;  // For [FirestoreData] and [FirestoreProperty]
+using Firebase.Firestore;
 
 [FirestoreData]
 [Serializable]
@@ -15,6 +15,7 @@ public class PlayerData
     [FirestoreProperty] public Dictionary<string, Vector2Data> HomeItemPositions { get; set; } = new Dictionary<string, Vector2Data>();
     [FirestoreProperty] public Dictionary<string, int> HomeItemLayers { get; set; }
     [FirestoreProperty] public List<SleepLog> SleepLogs { get; set; } = new List<SleepLog>();
+    [FirestoreProperty] public List<CustomGoal> CustomGoals { get; set; }
 }
 
 [FirestoreData]
