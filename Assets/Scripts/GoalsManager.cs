@@ -13,9 +13,17 @@ public class GoalsManager : MonoBehaviour
     public Button openAddGoalButton;
     public Button closeAddGoalButton;
     public TMP_InputField goalNameInput;
-    public TMP_InputField goalRewardInput;
     public Button createGoalButton;
     public GameObject addGoalPanel;
+
+    [Header("Reward Toggles")]
+    public Toggle reward10Toggle;
+    public Toggle reward50Toggle;
+    public Toggle reward100Toggle;
+    public ToggleGroup rewardToggleGroup;
+
+    [Header("Daily Goal Toggle")]
+    public Toggle dailyGoalToggle;
 
     [Header("Audio")]
     public AudioClip goalCompleteSound;
@@ -38,6 +46,17 @@ public class GoalsManager : MonoBehaviour
         if (createGoalButton != null)
             createGoalButton.onClick.AddListener(CreateCustomGoal);
 
+        // Set up reward toggle group
+        if (rewardToggleGroup != null)
+        {
+            reward10Toggle.group = rewardToggleGroup;
+            reward50Toggle.group = rewardToggleGroup;
+            reward100Toggle.group = rewardToggleGroup;
+        }
+
+        // Set default reward selection
+        reward50Toggle.isOn = true;
+
         // Ensure AddGoalPanel starts closed
         if (addGoalPanel != null)
             addGoalPanel.SetActive(false);
@@ -58,7 +77,8 @@ public class GoalsManager : MonoBehaviour
             Name = "Sleep 8 hours", 
             Reward = 50, 
             IsCompleted = false,
-            IsPredefined = true
+            IsPredefined = true,
+            IsDaily = true  // Predefined goals are daily by default
         });
 
         allGoals.Add(new Goal 
@@ -67,7 +87,8 @@ public class GoalsManager : MonoBehaviour
             Name = "Workout for 30 mins", 
             Reward = 100, 
             IsCompleted = false,
-            IsPredefined = true
+            IsPredefined = true,
+            IsDaily = true  // Predefined goals are daily by default
         });
     }
 
@@ -76,7 +97,7 @@ public class GoalsManager : MonoBehaviour
         string today = System.DateTime.Today.ToString("yyyy-MM-dd");
         string lastResetDate = PlayerPrefs.GetString("LastGoalResetDate", "");
 
-        // If it's a new day, reset completed goals
+        // If it's a new day, reset daily goals
         if (lastResetDate != today)
         {
             ResetDailyGoals();
@@ -87,23 +108,34 @@ public class GoalsManager : MonoBehaviour
 
     private void ResetDailyGoals()
     {
-        // Reset predefined goals
-        foreach (var goal in allGoals.Where(g => g.IsPredefined))
+        // Reset only daily goals
+        foreach (var goal in allGoals.Where(g => g.IsDaily && !g.IsCompleted))
         {
             goal.IsCompleted = false;
         }
 
-        // Remove completed goals from Firebase (optional)
+        // Remove completed daily goals from Firebase
         if (firebaseController?.currentPlayer != null)
         {
-            firebaseController.currentPlayer.CompletedGoals?.Clear();
+            // Clear completed goals that are daily
+            if (firebaseController.currentPlayer.CompletedGoals != null)
+            {
+                // We need to track which goals are daily to know which to reset
+                // For now, we'll reset all predefined goals (which are daily)
+                firebaseController.currentPlayer.CompletedGoals.Clear();
+            }
             
-            // Also reset custom goals completion status if they exist
+            // Reset custom daily goals completion status
             if (firebaseController.currentPlayer.CustomGoals != null)
             {
                 foreach (var customGoal in firebaseController.currentPlayer.CustomGoals)
                 {
-                    customGoal.IsCompleted = false;
+                    // Find if this custom goal is marked as daily
+                    var goal = allGoals.FirstOrDefault(g => g.Id == customGoal.Id);
+                    if (goal != null && goal.IsDaily)
+                    {
+                        customGoal.IsCompleted = false;
+                    }
                 }
             }
             
@@ -115,6 +147,7 @@ public class GoalsManager : MonoBehaviour
         }
 
         Debug.Log("Daily goals reset!");
+        DisplayGoals(); // Refresh the display
     }
 
     public async void DisplayGoals()
@@ -170,7 +203,8 @@ public class GoalsManager : MonoBehaviour
                     Name = customGoal.Name,
                     Reward = customGoal.Reward,
                     IsCompleted = customGoal.IsCompleted,
-                    IsPredefined = false
+                    IsPredefined = false,
+                    IsDaily = customGoal.IsDaily
                 });
             }
         }
@@ -188,10 +222,24 @@ public class GoalsManager : MonoBehaviour
         // Find the text and toggle components
         TMP_Text goalNameText = goalObj.transform.Find("GoalName")?.GetComponent<TMP_Text>();
         Toggle completeToggle = goalObj.transform.Find("CompleteGoal")?.GetComponent<Toggle>();
+        TMP_Text rewardText = goalObj.transform.Find("RewardText")?.GetComponent<TMP_Text>();
+        TMP_Text dailyBadge = goalObj.transform.Find("DailyBadge")?.GetComponent<TMP_Text>();
         
         // Set the goal name text
         if (goalNameText != null)
             goalNameText.text = goal.Name;
+
+        // Set reward text
+        if (rewardText != null)
+            rewardText.text = $"+${goal.Reward}";
+
+        // Show daily badge if it's a daily goal
+        if (dailyBadge != null)
+        {
+            dailyBadge.gameObject.SetActive(goal.IsDaily);
+            if (goal.IsDaily)
+                dailyBadge.text = "DAILY";
+        }
 
         // Set up the toggle
         if (completeToggle != null)
@@ -208,12 +256,6 @@ public class GoalsManager : MonoBehaviour
                 }
             });
         }
-
-        // You can also add the reward text somewhere if you want to display it
-        // For example, you could add a "RewardText" component to your prefab
-        TMP_Text rewardText = goalObj.transform.Find("RewardText")?.GetComponent<TMP_Text>();
-        if (rewardText != null)
-            rewardText.text = $"+${goal.Reward}";
     }
 
     public async void CompleteGoal(Goal goal)
@@ -229,12 +271,16 @@ public class GoalsManager : MonoBehaviour
         // Add money to player
         firebaseController.currentPlayer.Money += goal.Reward;
 
-        // Update completed goals list
-        if (firebaseController.currentPlayer.CompletedGoals == null)
-            firebaseController.currentPlayer.CompletedGoals = new List<string>();
+        // Update completed goals list (only for non-daily goals, or we track completion differently)
+        // For daily goals, we don't add to CompletedGoals since they reset daily
+        if (!goal.IsDaily)
+        {
+            if (firebaseController.currentPlayer.CompletedGoals == null)
+                firebaseController.currentPlayer.CompletedGoals = new List<string>();
 
-        if (!firebaseController.currentPlayer.CompletedGoals.Contains(goal.Id))
-            firebaseController.currentPlayer.CompletedGoals.Add(goal.Id);
+            if (!firebaseController.currentPlayer.CompletedGoals.Contains(goal.Id))
+                firebaseController.currentPlayer.CompletedGoals.Add(goal.Id);
+        }
 
         // For custom goals, also update the CustomGoals list
         if (!goal.IsPredefined && firebaseController.currentPlayer.CustomGoals != null)
@@ -263,6 +309,10 @@ public class GoalsManager : MonoBehaviour
         if (addGoalPanel != null)
         {
             addGoalPanel.SetActive(true);
+            // Reset form
+            if (goalNameInput != null) goalNameInput.text = "";
+            if (dailyGoalToggle != null) dailyGoalToggle.isOn = false;
+            if (reward50Toggle != null) reward50Toggle.isOn = true; // Default to 50
         }
     }
 
@@ -272,9 +322,6 @@ public class GoalsManager : MonoBehaviour
         if (addGoalPanel != null)
         {
             addGoalPanel.SetActive(false);
-            // Clear inputs
-            if (goalNameInput != null) goalNameInput.text = "";
-            if (goalRewardInput != null) goalRewardInput.text = "";
         }
     }
 
@@ -293,18 +340,16 @@ public class GoalsManager : MonoBehaviour
             return;
         }
 
-        // Validate reward amount
-        if (string.IsNullOrEmpty(goalRewardInput.text))
+        // Get selected reward amount
+        int reward = GetSelectedReward();
+        if (reward == 0)
         {
-            ShowNotification("Error", "Goal must have a reward value.");
+            ShowNotification("Error", "Please select a reward amount.");
             return;
         }
 
-        if (!int.TryParse(goalRewardInput.text, out int reward) || reward <= 0)
-        {
-            ShowNotification("Error", "Please enter a valid reward amount (must be a positive number).");
-            return;
-        }
+        // Get daily goal setting
+        bool isDaily = dailyGoalToggle != null && dailyGoalToggle.isOn;
 
         // Create new custom goal
         Goal newGoal = new Goal
@@ -313,7 +358,8 @@ public class GoalsManager : MonoBehaviour
             Name = goalNameInput.text.Trim(),
             Reward = reward,
             IsCompleted = false,
-            IsPredefined = false
+            IsPredefined = false,
+            IsDaily = isDaily
         };
 
         // Add to the list
@@ -331,7 +377,8 @@ public class GoalsManager : MonoBehaviour
             Id = newGoal.Id,
             Name = newGoal.Name,
             Reward = newGoal.Reward,
-            IsCompleted = newGoal.IsCompleted
+            IsCompleted = newGoal.IsCompleted,
+            IsDaily = newGoal.IsDaily
         });
 
         // Save to database
@@ -341,8 +388,17 @@ public class GoalsManager : MonoBehaviour
         CloseAddGoalPanel();
         DisplayGoals();
 
-        ShowNotification("Success", $"Goal '{newGoal.Name}' created!");
-        Debug.Log($"Goal '{newGoal.Name}' created!");
+        string dailyText = isDaily ? " (Daily)" : "";
+        ShowNotification("Success", $"Goal '{newGoal.Name}' created!{dailyText}");
+        Debug.Log($"Goal '{newGoal.Name}' created! Reward: ${reward}, Daily: {isDaily}");
+    }
+
+    private int GetSelectedReward()
+    {
+        if (reward10Toggle != null && reward10Toggle.isOn) return 10;
+        if (reward50Toggle != null && reward50Toggle.isOn) return 50;
+        if (reward100Toggle != null && reward100Toggle.isOn) return 100;
+        return 0; // No reward selected
     }
 
     private void ShowNotification(string title, string message)
@@ -384,4 +440,5 @@ public class Goal
     public int Reward;
     public bool IsCompleted;
     public bool IsPredefined;
+    public bool IsDaily;
 }

@@ -1551,19 +1551,13 @@ public class Vector2Data
     }
 }
 
-[System.Serializable]
-[Firebase.Firestore.FirestoreData]
+[Serializable]
+[FirestoreData]
 public class CustomGoal
 {
-    [Firebase.Firestore.FirestoreProperty]
-    public string Id { get; set; }
-    
-    [Firebase.Firestore.FirestoreProperty]
-    public string Name { get; set; }
-    
-    [Firebase.Firestore.FirestoreProperty]
-    public int Reward { get; set; }
-    
-    [Firebase.Firestore.FirestoreProperty]
-    public bool IsCompleted { get; set; }
+    [FirestoreProperty] public string Id { get; set; }
+    [FirestoreProperty] public string Name { get; set; }
+    [FirestoreProperty] public int Reward { get; set; }
+    [FirestoreProperty] public bool IsCompleted { get; set; }
+    [FirestoreProperty] public bool IsDaily { get; set; }
 }
