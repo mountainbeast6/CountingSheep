@@ -28,6 +28,18 @@ public class GoalsManager : MonoBehaviour
     public Toggle weeklyGoalToggle;
     public Toggle oneTimeGoalToggle;
 
+    [Header("Completed Goals Panel")]
+    public GameObject completedGoalsPanel;
+    public Button openCompletedGoalsButton;
+    public Button closeCompletedGoalsButton;
+    public Button showDailyCompletedButton;
+    public Button showWeeklyCompletedButton;
+    public GameObject dailyCompletedPanel;
+    public GameObject weeklyCompletedPanel;
+    public Transform dailyContent;
+    public Transform weeklyContent;
+    
+
     [Header("Audio")]
     public AudioClip goalCompleteSound;
     public AudioClip clickSound;
@@ -82,6 +94,29 @@ public class GoalsManager : MonoBehaviour
                 if (isOn) { dailyGoalToggle.isOn = false; weeklyGoalToggle.isOn = false; }
             });
         }
+
+        // ------------------ Completed Goals ------------------------------------
+        if (openCompletedGoalsButton != null)
+            openCompletedGoalsButton.onClick.AddListener(OpenCompletedGoalsPanel);
+        
+        if (closeCompletedGoalsButton != null)
+            closeCompletedGoalsButton.onClick.AddListener(CloseCompletedGoalsPanel);
+
+        if (showDailyCompletedButton != null)
+            showDailyCompletedButton.onClick.AddListener(ShowDailyCompletedGoals);
+
+        if (showWeeklyCompletedButton != null)
+            showWeeklyCompletedButton.onClick.AddListener(ShowWeeklyCompletedGoals);
+
+        // Ensure panels start in correct state
+        if (completedGoalsPanel != null)
+            completedGoalsPanel.SetActive(false);
+            
+        if (dailyCompletedPanel != null)
+            dailyCompletedPanel.SetActive(true); // Daily starts active
+            
+        if (weeklyCompletedPanel != null)
+            weeklyCompletedPanel.SetActive(false); // Weekly starts hidden
 
         // Check for daily reset
         CheckDailyReset();
@@ -584,6 +619,116 @@ public class GoalsManager : MonoBehaviour
         if (firebaseController != null && clickSound != null)
         {
             firebaseController.sfxSource.PlayOneShot(clickSound);
+        }
+    }
+
+    // ----------------------------- Completed Goals -----------------------------------------------------
+    public void OpenCompletedGoalsPanel()
+    {
+        PlayClickSound();
+        if (completedGoalsPanel != null)
+        {
+            completedGoalsPanel.SetActive(true);
+            ShowDailyCompletedGoals(); // Daily panel starts opened
+        }
+    }
+
+    public void CloseCompletedGoalsPanel()
+    {
+        PlayClickSound();
+        if (completedGoalsPanel != null)
+        {
+            completedGoalsPanel.SetActive(false);
+        }
+    }
+
+    public void ShowDailyCompletedGoals()
+    {
+        PlayClickSound();
+        if (dailyCompletedPanel != null) dailyCompletedPanel.SetActive(true);
+        if (weeklyCompletedPanel != null) weeklyCompletedPanel.SetActive(false);
+        
+        DisplayCompletedGoals(true); // true for daily
+    }
+
+    public void ShowWeeklyCompletedGoals()
+    {
+        PlayClickSound();
+        if (dailyCompletedPanel != null) dailyCompletedPanel.SetActive(false);
+        if (weeklyCompletedPanel != null) weeklyCompletedPanel.SetActive(true);
+        
+        DisplayCompletedGoals(false); // false for weekly
+    }
+
+    private void DisplayCompletedGoals(bool showDaily)
+    {
+        Transform currentContainer = showDaily ? dailyContent : weeklyContent;
+
+        if (currentContainer == null || goalPrefab == null) return;
+
+        // Clear existing goals (safe now since it's a dedicated container)
+        foreach (Transform child in currentContainer)
+            Destroy(child.gameObject);
+
+        // Load current completion status
+        UpdateGoalsCompletionStatus();
+
+        // Display completed goals based on type
+        foreach (var goal in allGoals.Where(g => g.IsCompleted &&
+                                            ((showDaily && g.IsDaily) ||
+                                                (!showDaily && g.IsWeekly))))
+        {
+            CreateCompletedGoalItem(goal, currentContainer);
+        }
+    }
+    
+    public void CloseCompletedGoalsPanelIfOpen()
+    {
+        if (completedGoalsPanel != null && completedGoalsPanel.activeSelf)
+        {
+            completedGoalsPanel.SetActive(false);
+        }
+    }
+
+    private void CreateCompletedGoalItem(Goal goal, Transform container)
+    {
+        GameObject goalObj = Instantiate(goalPrefab, container);
+        
+        TMP_Text goalNameText = goalObj.transform.Find("GoalName")?.GetComponent<TMP_Text>();
+        Toggle completeToggle = goalObj.transform.Find("CompleteGoal")?.GetComponent<Toggle>();
+        TMP_Text rewardText = goalObj.transform.Find("RewardText")?.GetComponent<TMP_Text>();
+        TMP_Text dailyBadge = goalObj.transform.Find("DailyBadge")?.GetComponent<TMP_Text>();
+        
+        if (goalNameText != null)
+            goalNameText.text = goal.Name;
+
+        if (rewardText != null)
+            rewardText.text = $"+${goal.Reward}";
+
+        if (dailyBadge != null)
+        {
+            if (goal.IsDaily)
+            {
+                dailyBadge.gameObject.SetActive(true);
+                dailyBadge.text = "DAILY";
+                dailyBadge.color = Color.yellow;
+            }
+            else if (goal.IsWeekly)
+            {
+                dailyBadge.gameObject.SetActive(true);
+                dailyBadge.text = "WEEKLY";
+                dailyBadge.color = Color.blue;
+            }
+            else
+            {
+                dailyBadge.gameObject.SetActive(false);
+            }
+        }
+
+        if (completeToggle != null)
+        {
+            completeToggle.isOn = true;
+            completeToggle.interactable = false; // Can't un-complete goals
         }
     }
 }
