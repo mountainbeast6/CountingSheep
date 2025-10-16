@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Threading.Tasks;
+using System;
 
 public class GoalsManager : MonoBehaviour
 {
@@ -22,8 +23,10 @@ public class GoalsManager : MonoBehaviour
     public Toggle reward100Toggle;
     public ToggleGroup rewardToggleGroup;
 
-    [Header("Daily Goal Toggle")]
+    [Header("Goal Type Toggles")]
     public Toggle dailyGoalToggle;
+    public Toggle weeklyGoalToggle;
+    public Toggle oneTimeGoalToggle;
 
     [Header("Audio")]
     public AudioClip goalCompleteSound;
@@ -54,18 +57,68 @@ public class GoalsManager : MonoBehaviour
             reward100Toggle.group = rewardToggleGroup;
         }
 
-        // Set default reward selection
-        reward50Toggle.isOn = true;
+        // Set default selections
+        reward10Toggle.isOn = true;
+        oneTimeGoalToggle.isOn = true;
 
         // Ensure AddGoalPanel starts closed
         if (addGoalPanel != null)
             addGoalPanel.SetActive(false);
+
+        // Set up goal type toggles
+        if (dailyGoalToggle != null && weeklyGoalToggle != null && oneTimeGoalToggle != null)
+        {
+            // Make them mutually exclusive
+            dailyGoalToggle.onValueChanged.AddListener((isOn) =>
+            {
+                if (isOn) { weeklyGoalToggle.isOn = false; oneTimeGoalToggle.isOn = false; }
+            });
+            weeklyGoalToggle.onValueChanged.AddListener((isOn) =>
+            {
+                if (isOn) { dailyGoalToggle.isOn = false; oneTimeGoalToggle.isOn = false; }
+            });
+            oneTimeGoalToggle.onValueChanged.AddListener((isOn) =>
+            {
+                if (isOn) { dailyGoalToggle.isOn = false; weeklyGoalToggle.isOn = false; }
+            });
+        }
 
         // Check for daily reset
         CheckDailyReset();
 
         // Initialize predefined goals
         InitializePredefinedGoals();
+
+        // DELAY the sound setup to avoid playing on app start
+        StartCoroutine(DelayedSoundSetup());
+    }
+
+    private System.Collections.IEnumerator DelayedSoundSetup()
+    {
+        // Wait for one frame to ensure all toggles are set up
+        yield return null;
+        
+        // Now safely add sound listeners
+        AddToggleSoundListeners();
+    }
+
+    private void AddToggleSoundListeners()
+    {
+        // Add sound to REWARD toggles
+        if (reward10Toggle != null)
+            reward10Toggle.onValueChanged.AddListener(PlayToggleSound);
+        if (reward50Toggle != null)
+            reward50Toggle.onValueChanged.AddListener(PlayToggleSound);
+        if (reward100Toggle != null)
+            reward100Toggle.onValueChanged.AddListener(PlayToggleSound);
+
+        // Add sound to GOAL TYPE toggles
+        if (dailyGoalToggle != null)
+            dailyGoalToggle.onValueChanged.AddListener(PlayToggleSound);
+        if (weeklyGoalToggle != null)
+            weeklyGoalToggle.onValueChanged.AddListener(PlayToggleSound);
+        if (oneTimeGoalToggle != null)
+            oneTimeGoalToggle.onValueChanged.AddListener(PlayToggleSound);
     }
 
     void InitializePredefinedGoals()
@@ -110,9 +163,49 @@ public class GoalsManager : MonoBehaviour
         if (lastResetDate != today)
         {
             ResetDailyGoals();
+            
+            // Check if it's a new week (Monday)
+            if (System.DateTime.Today.DayOfWeek == DayOfWeek.Monday)
+            {
+                ResetWeeklyGoals();
+            }
+            
             PlayerPrefs.SetString("LastGoalResetDate", today);
             PlayerPrefs.Save();
         }
+    }
+
+    private void ResetWeeklyGoals()
+    {
+        // Reset only weekly goals
+        foreach (var goal in allGoals.Where(g => g.IsWeekly && !g.IsCompleted))
+        {
+            goal.IsCompleted = false;
+        }
+
+        // Remove completed weekly goals from Firebase
+        if (firebaseController?.currentPlayer != null)
+        {
+            // Reset custom weekly goals completion status
+            if (firebaseController.currentPlayer.CustomGoals != null)
+            {
+                foreach (var customGoal in firebaseController.currentPlayer.CustomGoals)
+                {
+                    if (customGoal.IsWeekly)
+                    {
+                        customGoal.IsCompleted = false;
+                    }
+                }
+            }
+            
+            // Save to database if user is logged in
+            if (!string.IsNullOrEmpty(firebaseController.currentUserId))
+            {
+                _ = firebaseController.firestoreService.SavePlayerAsync(firebaseController.currentUserId, firebaseController.currentPlayer);
+            }
+        }
+
+        Debug.Log("Weekly goals reset!");
     }
 
     private void ResetDailyGoals()
@@ -213,7 +306,8 @@ public class GoalsManager : MonoBehaviour
                     Reward = customGoal.Reward,
                     IsCompleted = customGoal.IsCompleted,
                     IsPredefined = false,
-                    IsDaily = customGoal.IsDaily
+                    IsDaily = customGoal.IsDaily,
+                    IsWeekly = customGoal.IsWeekly
                 });
             }
         }
@@ -233,65 +327,49 @@ public class GoalsManager : MonoBehaviour
         Toggle completeToggle = goalObj.transform.Find("CompleteGoal")?.GetComponent<Toggle>();
         TMP_Text rewardText = goalObj.transform.Find("RewardText")?.GetComponent<TMP_Text>();
         TMP_Text dailyBadge = goalObj.transform.Find("DailyBadge")?.GetComponent<TMP_Text>();
-        TMP_Text progressText = goalObj.transform.Find("ProgressText")?.GetComponent<TMP_Text>(); // Add this UI element
         
-        // Special handling for sleep streak goal
-        if (goal.Id == "sleep_streak_goal" && firebaseController?.currentPlayer != null)
-        {
-            int currentStreak = firebaseController.currentPlayer.SleepLogStreak;
-            int requiredStreak = 5;
-            
-            // Update goal name to show progress
-            if (goalNameText != null)
-                goalNameText.text = $"{goal.Name} ({currentStreak}/{requiredStreak})";
-            
-            // Show progress text if available
-            if (progressText != null)
-            {
-                progressText.gameObject.SetActive(true);
-                progressText.text = $"{currentStreak}/{requiredStreak} days";
-            }
-            
-            // Only enable toggle if streak is complete
-            if (completeToggle != null)
-            {
-                completeToggle.interactable = currentStreak >= requiredStreak && !goal.IsCompleted;
-                completeToggle.isOn = goal.IsCompleted;
-            }
-        }
-        else
-        {
-            // Normal goal handling
-            if (goalNameText != null)
-                goalNameText.text = goal.Name;
-
-            if (progressText != null)
-                progressText.gameObject.SetActive(false);
-                
-            if (completeToggle != null)
-            {
-                completeToggle.interactable = !goal.IsCompleted;
-                completeToggle.isOn = goal.IsCompleted;
-            }
-        }
+        // Set the goal name text
+        if (goalNameText != null)
+            goalNameText.text = goal.Name;
 
         // Set reward text
         if (rewardText != null)
             rewardText.text = $"+${goal.Reward}";
 
-        // Show daily badge if it's a daily goal
+        // Show daily/weekly badges
         if (dailyBadge != null)
         {
-            dailyBadge.gameObject.SetActive(goal.IsDaily);
             if (goal.IsDaily)
+            {
+                dailyBadge.gameObject.SetActive(true);
                 dailyBadge.text = "DAILY";
+                dailyBadge.color = Color.yellow; // Or keep existing color
+            }
+            else if (goal.IsWeekly)
+            {
+                dailyBadge.gameObject.SetActive(true);
+                dailyBadge.text = "WEEKLY";
+                dailyBadge.color = Color.blue; // Different color for weekly
+            }
+            else
+            {
+                dailyBadge.gameObject.SetActive(false);
+            }
         }
 
-        // Set up the toggle listener
+        // Set up the toggle
         if (completeToggle != null)
         {
+            // Set the toggle state based on completion status
+            completeToggle.isOn = goal.IsCompleted;
+            
+            // Make toggle interactable only if goal is not completed
+            completeToggle.interactable = !goal.IsCompleted;
+            
+            // Set up toggle listener
             completeToggle.onValueChanged.RemoveAllListeners();
             completeToggle.onValueChanged.AddListener((isOn) => {
+                if (isOn) PlayClickSound();
                 if (isOn && !goal.IsCompleted)
                 {
                     CompleteGoal(goal);
@@ -313,9 +391,8 @@ public class GoalsManager : MonoBehaviour
         // Add money to player
         firebaseController.currentPlayer.Money += goal.Reward;
 
-        // Update completed goals list (only for non-daily goals, or we track completion differently)
-        // For daily goals, we don't add to CompletedGoals since they reset daily
-        if (!goal.IsDaily)
+        // Update completed goals list (only for one-time goals)
+        if (!goal.IsDaily && !goal.IsWeekly)
         {
             if (firebaseController.currentPlayer.CompletedGoals == null)
                 firebaseController.currentPlayer.CompletedGoals = new List<string>();
@@ -354,7 +431,8 @@ public class GoalsManager : MonoBehaviour
             // Reset form
             if (goalNameInput != null) goalNameInput.text = "";
             if (dailyGoalToggle != null) dailyGoalToggle.isOn = false;
-            if (reward50Toggle != null) reward50Toggle.isOn = true; // Default to 50
+            if (oneTimeGoalToggle != null) oneTimeGoalToggle.isOn = true;
+            if (reward10Toggle != null) reward10Toggle.isOn = true;
         }
     }
 
@@ -390,8 +468,10 @@ public class GoalsManager : MonoBehaviour
             return;
         }
 
-        // Get daily goal setting
+        // Get goal type
         bool isDaily = dailyGoalToggle != null && dailyGoalToggle.isOn;
+        bool isWeekly = weeklyGoalToggle != null && weeklyGoalToggle.isOn;
+        // If neither is selected, it's a one-time goal
 
         // Create new custom goal
         Goal newGoal = new Goal
@@ -401,7 +481,8 @@ public class GoalsManager : MonoBehaviour
             Reward = reward,
             IsCompleted = false,
             IsPredefined = false,
-            IsDaily = isDaily
+            IsDaily = isDaily,
+            IsWeekly = isWeekly
         };
 
         // Add to the list
@@ -420,7 +501,8 @@ public class GoalsManager : MonoBehaviour
             Name = newGoal.Name,
             Reward = newGoal.Reward,
             IsCompleted = newGoal.IsCompleted,
-            IsDaily = newGoal.IsDaily
+            IsDaily = newGoal.IsDaily,
+            IsWeekly = newGoal.IsWeekly
         });
 
         // Save to database
@@ -430,9 +512,9 @@ public class GoalsManager : MonoBehaviour
         CloseAddGoalPanel();
         DisplayGoals();
 
-        string dailyText = isDaily ? " (Daily)" : "";
-        ShowNotification("Success", $"Goal '{newGoal.Name}' created!{dailyText}");
-        Debug.Log($"Goal '{newGoal.Name}' created! Reward: ${reward}, Daily: {isDaily}");
+        string typeText = isDaily ? " (Daily)" : isWeekly ? " (Weekly)" : "";
+        ShowNotification("Success", $"Goal '{newGoal.Name}' created!{typeText}");
+        Debug.Log($"Goal '{newGoal.Name}' created! Reward: ${reward}, Daily: {isDaily}, Weekly: {isWeekly}");
     }
 
     private int GetSelectedReward()
@@ -472,6 +554,15 @@ public class GoalsManager : MonoBehaviour
             firebaseController.sfxSource.PlayOneShot(clickSound);
         }
     }
+
+    public void PlayToggleSound(bool isOn)
+    {
+        // Play sound for EVERY toggle change
+        if (firebaseController != null && clickSound != null)
+        {
+            firebaseController.sfxSource.PlayOneShot(clickSound);
+        }
+    }
 }
 
 [System.Serializable]
@@ -483,4 +574,5 @@ public class Goal
     public bool IsCompleted;
     public bool IsPredefined;
     public bool IsDaily;
+    public bool IsWeekly;
 }

@@ -1674,4 +1674,5 @@ public class CustomGoal
     [FirestoreProperty] public int Reward { get; set; }
     [FirestoreProperty] public bool IsCompleted { get; set; }
     [FirestoreProperty] public bool IsDaily { get; set; }
+    [FirestoreProperty] public bool IsWeekly { get; set; }
 }
