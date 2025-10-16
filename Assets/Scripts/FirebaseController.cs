@@ -97,13 +97,20 @@ public class FirebaseController : MonoBehaviour
 
     private int currentSongIndex = 0;
 
+    [Header("Sleep Graph UI")]
+    public GameObject sleepGraphPanel;       // The panel that contains the graph
+    public Transform graphContainer;         // Parent container for the bars
+    public GameObject barPrefab;             // Prefab for each bar (Image + Text)
+    public float maxBarHeight = 200f;        // Maximum height of bars in pixels
+    public Button openGraphButton;           // Button to open the graph
+    public Button closeGraphButton;          // Button to close the graph
 
     // Dictionary to track instantiated furniture GameObjects
     private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
 
     private ShopDatabase shopDatabase = new ShopDatabase();
 
-    private PlayerData currentPlayer;
+    public PlayerData currentPlayer;
 
     private async void Start()
     {
@@ -128,7 +135,7 @@ public class FirebaseController : MonoBehaviour
 
         if (logSleepButton != null)
         {
-            logSleepButton.onClick.RemoveAllListeners(); 
+            logSleepButton.onClick.RemoveAllListeners();
             logSleepButton.onClick.AddListener(() => LogSleep());
             Debug.Log("Sleep log button listener added");
         }
@@ -136,9 +143,20 @@ public class FirebaseController : MonoBehaviour
         {
             Debug.LogError("logSleepButton is not assigned in the Inspector!");
         }
+        
+        // ------------------------- Hide Panels -------------------------------
 
         if (editSleepPanel != null)
             editSleepPanel.SetActive(false);
+
+        if (sleepGraphPanel != null)
+            sleepGraphPanel.SetActive(false);
+
+        if (openGraphButton != null)
+            openGraphButton.onClick.AddListener(OpenSleepGraph);
+
+        if (closeGraphButton != null)
+            closeGraphButton.onClick.AddListener(CloseSleepGraph);
 
         InitializeFurnitureSprites();
 
@@ -322,6 +340,13 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+
+        // Find GoalsManager and display goals
+        GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
+        if (goalsManager != null)
+        {
+            goalsManager.DisplayGoals();
+        }
     }
 
     public void OpenStatsPanel()
@@ -340,6 +365,7 @@ public class FirebaseController : MonoBehaviour
         inventoryPanel.SetActive(false);
         if (currentPlayer != null)
         {
+            RecalculateSleepStreak();
             DisplaySleepLogs();
         }
     }
@@ -378,7 +404,7 @@ public class FirebaseController : MonoBehaviour
     }
 
     // -------------------- Notifications --------------------
-    private void showNotificationMessage(string title, string message)
+    public void showNotificationMessage(string title, string message)
     {
         notif_Title_Text.text = title;
         notif_Message_Text.text = message;
@@ -427,6 +453,14 @@ public class FirebaseController : MonoBehaviour
                 };
                 await firestoreService.SavePlayerAsync(currentUserId, player);
             }
+
+            if (player.SleepLogs != null && player.SleepLogs.Count > 0)
+            {
+                RecalculateSleepStreak();
+                // Save the recalculated streak
+                await firestoreService.SavePlayerAsync(currentUserId, player);
+            }
+            
             SetPlayerData(player);
             // Update UI
             userMoney.text = player.Money.ToString();
@@ -614,56 +648,6 @@ public class FirebaseController : MonoBehaviour
         PlayerPrefs.Save();
         
         OpenLoginPanel();
-    }
-
-    // -------------------- Goals / Money --------------------
-    // Goal 1
-    public void CompleteGoal1()
-    {
-        CompleteGoal("goal1", 50);
-    }
-
-    // Goal 2
-    public void CompleteGoal2()
-    {
-        CompleteGoal("goal2", 100);
-    }
-
-    // Goal 3
-    public void CompleteGoal3()
-    {
-        CompleteGoal("goal3", 200);
-    }
-
-    public async void CompleteGoal(string goalId, int moneyEarned)
-    {
-        // Hide the button immediately
-        GameObject goalObject = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
-        if (goalObject != null)
-            goalObject.SetActive(false);
-
-        
-        PlayGoalCompleteSound();
-
-        if (!string.IsNullOrEmpty(currentUserId))
-        {
-            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
-
-            // Add money
-            player.Money += moneyEarned;
-
-            // Mark goal as completed
-            if (player.CompletedGoals == null)
-                player.CompletedGoals = new List<string>();
-
-            if (!player.CompletedGoals.Contains(goalId))
-                player.CompletedGoals.Add(goalId);
-
-            await firestoreService.SavePlayerAsync(currentUserId, player);
-
-            // Update UI
-            userMoney.text = player.Money.ToString();
-        }
     }
 
     // -----------------SHOP-------------------------------------
@@ -1407,6 +1391,9 @@ public class FirebaseController : MonoBehaviour
         else
         {
             currentPlayer.SleepLogs.Add(new SleepLog { Date = dateString, Hours = hours });
+
+            // Update sleep streak
+            UpdateSleepStreak(dateString);
         }
 
         await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
@@ -1414,6 +1401,108 @@ public class FirebaseController : MonoBehaviour
         sleepHoursInput.text = "";
         showNotificationMessage("Success", $"Logged {hours} hours of sleep for today!");
         DisplaySleepLogs();
+
+        // Refresh goals to update streak display
+        GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
+        if (goalsManager != null)
+        {
+            goalsManager.DisplayGoals();
+        }
+    }
+
+    private void UpdateSleepStreak(string currentDate)
+    {
+        if (string.IsNullOrEmpty(currentPlayer.LastSleepLogDate))
+        {
+            // First time logging sleep
+            currentPlayer.SleepLogStreak = 1;
+            currentPlayer.LastSleepLogDate = currentDate;
+            return;
+        }
+
+        DateTime lastDate = DateTime.Parse(currentPlayer.LastSleepLogDate);
+        DateTime currentDateTime = DateTime.Parse(currentDate);
+
+        // Check if we already logged sleep today
+        bool alreadyLoggedToday = currentPlayer.SleepLogs.Any(log => log.Date == currentDate && log.Hours > 0);
+
+        if (alreadyLoggedToday && currentDate == currentPlayer.LastSleepLogDate)
+        {
+            // Already logged today, don't change streak
+            return;
+        }
+
+        TimeSpan difference = currentDateTime - lastDate;
+
+        if (difference.Days == 1)
+        {
+            // Consecutive day - increment streak
+            currentPlayer.SleepLogStreak++;
+            Debug.Log($"Streak increased to: {currentPlayer.SleepLogStreak}");
+        }
+        else if (difference.Days == 0)
+        {
+            // Same day - don't change streak
+            // This handles multiple logs on the same day
+        }
+        else
+        {
+            // Streak broken (gap of 2+ days) - reset to 1
+            currentPlayer.SleepLogStreak = 1;
+            Debug.Log($"Streak reset to: {currentPlayer.SleepLogStreak}");
+        }
+
+        currentPlayer.LastSleepLogDate = currentDate;
+        Debug.Log($"Sleep streak updated: {currentPlayer.SleepLogStreak} days, last date: {currentPlayer.LastSleepLogDate}");
+    }
+    
+    public void RecalculateSleepStreak()
+    {
+        if (currentPlayer?.SleepLogs == null || currentPlayer.SleepLogs.Count == 0)
+        {
+            currentPlayer.SleepLogStreak = 0;
+            currentPlayer.LastSleepLogDate = "";
+            return;
+        }
+
+        // Sort logs by date
+        var sortedLogs = currentPlayer.SleepLogs
+            .Where(log => !string.IsNullOrEmpty(log.Date) && log.Hours > 0)
+            .OrderBy(log => log.Date)
+            .ToList();
+
+        if (sortedLogs.Count == 0)
+        {
+            currentPlayer.SleepLogStreak = 0;
+            currentPlayer.LastSleepLogDate = "";
+            return;
+        }
+
+        int streak = 1;
+        string lastDate = sortedLogs.Last().Date;
+
+        // Calculate consecutive days from most recent
+        for (int i = sortedLogs.Count - 1; i > 0; i--)
+        {
+            DateTime currentDay = DateTime.Parse(sortedLogs[i].Date);
+            DateTime previousDay = DateTime.Parse(sortedLogs[i - 1].Date);
+            TimeSpan difference = currentDay - previousDay;
+
+            if (difference.Days == 1)
+            {
+                streak++;
+            }
+            else if (difference.Days > 1)
+            {
+                break; // Streak broken
+            }
+            // If same day, continue without breaking streak
+        }
+
+        currentPlayer.SleepLogStreak = streak;
+        currentPlayer.LastSleepLogDate = lastDate;
+        
+        Debug.Log($"Recalculated streak: {currentPlayer.SleepLogStreak} days");
     }
 
     public void DisplaySleepLogs()
@@ -1471,8 +1560,85 @@ public class FirebaseController : MonoBehaviour
         }
     }
 
+    public void OpenSleepGraph()
+    {
+        PlayClickSound();
+        if (sleepGraphPanel != null)
+        {
+            sleepGraphPanel.SetActive(true);
+            UpdateSleepGraph(); // Update the graph when opening
+        }
+    }
 
+    public void CloseSleepGraph()
+    {
+        PlayClickSound();
+        if (sleepGraphPanel != null)
+        {
+            sleepGraphPanel.SetActive(false);
+        }
+    }
 
+    public void UpdateSleepGraph()
+    {
+        if (graphContainer == null || barPrefab == null) return;
+
+        // Clear existing bars
+        foreach (Transform child in graphContainer)
+            Destroy(child.gameObject);
+
+        if (currentPlayer?.SleepLogs == null || currentPlayer.SleepLogs.Count == 0) return;
+
+        // Get last 7 days of data
+        DateTime today = DateTime.Today;
+        string[] dayNames = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+
+        for (int i = 6; i >= 0; i--)
+        {
+            DateTime date = today.AddDays(-i);
+            string dateString = date.ToString("yyyy-MM-dd");
+            string dayName = dayNames[(int)date.DayOfWeek];
+
+            // Find sleep data for this date
+            SleepLog log = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == dateString);
+            float hours = log?.Hours ?? 0f;
+
+            // Create bar
+            GameObject barObj = Instantiate(barPrefab, graphContainer);
+            
+            // Set bar height (assuming 8 hours = max height)
+            RectTransform barRect = barObj.transform.Find("Bar")?.GetComponent<RectTransform>();
+            if (barRect != null)
+            {
+                float heightPercent = Mathf.Clamp01(hours / 8f); // 8 hours = 100%
+                barRect.sizeDelta = new Vector2(barRect.sizeDelta.x, maxBarHeight * heightPercent);
+            }
+
+            // Set day label
+            TMP_Text dayLabel = barObj.transform.Find("DayLabel")?.GetComponent<TMP_Text>();
+            if (dayLabel != null)
+                dayLabel.text = dayName;
+
+            // Set hours label
+            TMP_Text hoursLabel = barObj.transform.Find("HoursLabel")?.GetComponent<TMP_Text>();
+            if (hoursLabel != null)
+                hoursLabel.text = hours > 0 ? $"{hours}h" : "";
+
+            // Optional: Color code the bar based on hours
+            UnityEngine.UI.Image barImage = barObj.transform.Find("Bar")?.GetComponent<UnityEngine.UI.Image>();
+            if (barImage != null)
+            {
+                if (hours >= 7 && hours <= 9)
+                    barImage.color = new Color(0.3f, 0.8f, 0.3f); // Green - good sleep
+                else if (hours >= 6 && hours < 7)
+                    barImage.color = new Color(0.9f, 0.8f, 0.2f); // Yellow - okay sleep
+                else if (hours > 0)
+                    barImage.color = new Color(0.9f, 0.3f, 0.3f); // Red - poor sleep
+                else
+                    barImage.color = new Color(0.5f, 0.5f, 0.5f); // Gray - no data
+            }
+        }
+    }
 }
 
 [System.Serializable]
@@ -1481,20 +1647,32 @@ public class Vector2Data
 {
     [Firebase.Firestore.FirestoreProperty]
     public float x { get; set; }
-    
+
     [Firebase.Firestore.FirestoreProperty]
     public float y { get; set; }
-    
+
     public Vector2Data() { }
-    
+
     public Vector2Data(float x, float y)
     {
         this.x = x;
         this.y = y;
     }
-    
+
     public Vector2 ToVector2()
     {
         return new Vector2(x, y);
     }
+}
+
+[Serializable]
+[FirestoreData]
+public class CustomGoal
+{
+    [FirestoreProperty] public string Id { get; set; }
+    [FirestoreProperty] public string Name { get; set; }
+    [FirestoreProperty] public int Reward { get; set; }
+    [FirestoreProperty] public bool IsCompleted { get; set; }
+    [FirestoreProperty] public bool IsDaily { get; set; }
+    [FirestoreProperty] public bool IsWeekly { get; set; }
 }
