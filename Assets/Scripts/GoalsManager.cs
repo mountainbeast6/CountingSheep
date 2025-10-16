@@ -395,6 +395,8 @@ public class GoalsManager : MonoBehaviour
         if (firebaseController?.currentPlayer == null || string.IsNullOrEmpty(firebaseController.currentUserId)) 
             return;
 
+        if (goal.IsCompleted) return;
+
         PlayGoalCompleteSound();
 
         // Mark goal as completed
@@ -403,15 +405,12 @@ public class GoalsManager : MonoBehaviour
         // Add money to player
         firebaseController.currentPlayer.Money += goal.Reward;
 
-        // Update completed goals list (only for one-time goals)
-        if (!goal.IsDaily && !goal.IsWeekly)
-        {
-            if (firebaseController.currentPlayer.CompletedGoals == null)
-                firebaseController.currentPlayer.CompletedGoals = new List<string>();
+        // Add to CompletedGoals
+        if (firebaseController.currentPlayer.CompletedGoals == null)
+            firebaseController.currentPlayer.CompletedGoals = new List<string>();
 
-            if (!firebaseController.currentPlayer.CompletedGoals.Contains(goal.Id))
-                firebaseController.currentPlayer.CompletedGoals.Add(goal.Id);
-        }
+        if (!firebaseController.currentPlayer.CompletedGoals.Contains(goal.Id))
+            firebaseController.currentPlayer.CompletedGoals.Add(goal.Id);
 
         // For custom goals, also update the CustomGoals list
         if (!goal.IsPredefined && firebaseController.currentPlayer.CustomGoals != null)
@@ -424,13 +423,25 @@ public class GoalsManager : MonoBehaviour
         }
 
         // Save to database
-        await firebaseController.firestoreService.SavePlayerAsync(firebaseController.currentUserId, firebaseController.currentPlayer);
+        try
+        {
+            await firebaseController.firestoreService.SavePlayerAsync(firebaseController.currentUserId, firebaseController.currentPlayer);
+            Debug.Log($"Goal '{goal.Name}' completed and saved to database");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Failed to save goal completion: {ex.Message}");
+            // Revert changes if save failed
+            goal.IsCompleted = false;
+            firebaseController.currentPlayer.Money -= goal.Reward;
+            return;
+        }
 
         // Update UI
         if (firebaseController.userMoney != null)
             firebaseController.userMoney.text = firebaseController.currentPlayer.Money.ToString();
 
-        // Refresh goals display (this will remove completed goals)
+        // Refresh goals display
         DisplayGoals();
     }
 
