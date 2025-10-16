@@ -285,8 +285,19 @@ public class GoalsManager : MonoBehaviour
         var player = firebaseController.currentPlayer;
         if (player.CompletedGoals == null) return;
 
+        // Handle sleep streak goal separately BEFORE checking completed goals
+        var sleepStreakGoal = allGoals.FirstOrDefault(g => g.Id == "sleep_streak_goal");
+        if (sleepStreakGoal != null && firebaseController?.currentPlayer != null)
+        {
+            // Check if already completed (one-time goal)
+            bool alreadyCompleted = player.CompletedGoals.Contains("sleep_streak_goal");
+            
+            // Only mark as completable if streak is 5+ AND not already completed
+            sleepStreakGoal.IsCompleted = alreadyCompleted || firebaseController.currentPlayer.SleepLogStreak >= 5;
+        }
+
         // Update predefined goals completion status
-        foreach (var goal in allGoals.Where(g => g.IsPredefined))
+        foreach (var goal in allGoals.Where(g => g.IsPredefined && g.Id != "sleep_streak_goal"))
         {
             goal.IsCompleted = player.CompletedGoals.Contains(goal.Id);
         }
@@ -322,34 +333,30 @@ public class GoalsManager : MonoBehaviour
     {
         GameObject goalObj = Instantiate(goalPrefab, goalsListContainer);
         
-        // Find the text and toggle components
         TMP_Text goalNameText = goalObj.transform.Find("GoalName")?.GetComponent<TMP_Text>();
         Toggle completeToggle = goalObj.transform.Find("CompleteGoal")?.GetComponent<Toggle>();
         TMP_Text rewardText = goalObj.transform.Find("RewardText")?.GetComponent<TMP_Text>();
         TMP_Text dailyBadge = goalObj.transform.Find("DailyBadge")?.GetComponent<TMP_Text>();
         
-        // Set the goal name text
         if (goalNameText != null)
             goalNameText.text = goal.Name;
 
-        // Set reward text
         if (rewardText != null)
             rewardText.text = $"+${goal.Reward}";
 
-        // Show daily/weekly badges
         if (dailyBadge != null)
         {
             if (goal.IsDaily)
             {
                 dailyBadge.gameObject.SetActive(true);
                 dailyBadge.text = "DAILY";
-                dailyBadge.color = Color.yellow; // Or keep existing color
+                dailyBadge.color = Color.yellow;
             }
             else if (goal.IsWeekly)
             {
                 dailyBadge.gameObject.SetActive(true);
                 dailyBadge.text = "WEEKLY";
-                dailyBadge.color = Color.blue; // Different color for weekly
+                dailyBadge.color = Color.blue;
             }
             else
             {
@@ -357,16 +364,21 @@ public class GoalsManager : MonoBehaviour
             }
         }
 
-        // Set up the toggle
         if (completeToggle != null)
         {
-            // Set the toggle state based on completion status
             completeToggle.isOn = goal.IsCompleted;
             
-            // Make toggle interactable only if goal is not completed
-            completeToggle.interactable = !goal.IsCompleted;
+            // Special check for sleep streak goal
+            if (goal.Id == "sleep_streak_goal")
+            {
+                int currentStreak = firebaseController?.currentPlayer?.SleepLogStreak ?? 0;
+                completeToggle.interactable = currentStreak >= 5 && !goal.IsCompleted;
+            }
+            else
+            {
+                completeToggle.interactable = !goal.IsCompleted;
+            }
             
-            // Set up toggle listener
             completeToggle.onValueChanged.RemoveAllListeners();
             completeToggle.onValueChanged.AddListener((isOn) => {
                 if (isOn) PlayClickSound();
@@ -383,6 +395,8 @@ public class GoalsManager : MonoBehaviour
         if (firebaseController?.currentPlayer == null || string.IsNullOrEmpty(firebaseController.currentUserId)) 
             return;
 
+        if (goal.IsCompleted) return;
+
         PlayGoalCompleteSound();
 
         // Mark goal as completed
@@ -391,15 +405,12 @@ public class GoalsManager : MonoBehaviour
         // Add money to player
         firebaseController.currentPlayer.Money += goal.Reward;
 
-        // Update completed goals list (only for one-time goals)
-        if (!goal.IsDaily && !goal.IsWeekly)
-        {
-            if (firebaseController.currentPlayer.CompletedGoals == null)
-                firebaseController.currentPlayer.CompletedGoals = new List<string>();
+        // Add to CompletedGoals
+        if (firebaseController.currentPlayer.CompletedGoals == null)
+            firebaseController.currentPlayer.CompletedGoals = new List<string>();
 
-            if (!firebaseController.currentPlayer.CompletedGoals.Contains(goal.Id))
-                firebaseController.currentPlayer.CompletedGoals.Add(goal.Id);
-        }
+        if (!firebaseController.currentPlayer.CompletedGoals.Contains(goal.Id))
+            firebaseController.currentPlayer.CompletedGoals.Add(goal.Id);
 
         // For custom goals, also update the CustomGoals list
         if (!goal.IsPredefined && firebaseController.currentPlayer.CustomGoals != null)
@@ -412,13 +423,25 @@ public class GoalsManager : MonoBehaviour
         }
 
         // Save to database
-        await firebaseController.firestoreService.SavePlayerAsync(firebaseController.currentUserId, firebaseController.currentPlayer);
+        try
+        {
+            await firebaseController.firestoreService.SavePlayerAsync(firebaseController.currentUserId, firebaseController.currentPlayer);
+            Debug.Log($"Goal '{goal.Name}' completed and saved to database");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Failed to save goal completion: {ex.Message}");
+            // Revert changes if save failed
+            goal.IsCompleted = false;
+            firebaseController.currentPlayer.Money -= goal.Reward;
+            return;
+        }
 
         // Update UI
         if (firebaseController.userMoney != null)
             firebaseController.userMoney.text = firebaseController.currentPlayer.Money.ToString();
 
-        // Refresh goals display (this will remove completed goals)
+        // Refresh goals display
         DisplayGoals();
     }
 
