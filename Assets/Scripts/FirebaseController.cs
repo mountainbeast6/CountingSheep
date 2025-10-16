@@ -289,6 +289,8 @@ public class FirebaseController : MonoBehaviour
         if (hasInitialized) PlayClickSound();
         currentPanel = "Home";
 
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
         loginPanel.SetActive(false);
         signupPanel.SetActive(false);
         resetPasswordPanel.SetActive(false);
@@ -315,6 +317,8 @@ public class FirebaseController : MonoBehaviour
         if (currentPanel == "Profile") return;
         if (hasInitialized) PlayClickSound();
         currentPanel = "Profile";
+
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
 
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
@@ -355,6 +359,8 @@ public class FirebaseController : MonoBehaviour
         if (hasInitialized) PlayClickSound();
         currentPanel = "Stats";
 
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -376,6 +382,8 @@ public class FirebaseController : MonoBehaviour
         if (hasInitialized) PlayClickSound();
         currentPanel = "Settings";
 
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
         goalsPanel.SetActive(false);
@@ -391,6 +399,8 @@ public class FirebaseController : MonoBehaviour
         if (currentPanel == "Shop") return;
         if (hasInitialized) PlayClickSound();
         currentPanel = "Shop";
+
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
 
         tabsPanel.SetActive(true);
         homePanel.SetActive(false);
