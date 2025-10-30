@@ -10,12 +10,14 @@ public class ShopItem
     public GameObject Prefab { get; set; }
     public Vector3 HomePosition { get; set; }
     public Sprite Icon { get; set; }
+    public float Scale { get; set; } = 1f;
 
-    public ShopItem(string id, string name, string type, int cost)
+    public ShopItem(string id, string name, string type, int cost, float scale = 1f)
     {
         Id = id;
         Name = name;
         Type = type;
         Cost = cost;
+        Scale = scale;
     }
 }

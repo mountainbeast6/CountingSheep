@@ -72,10 +72,12 @@ public class FirebaseController : MonoBehaviour
     public GameObject chairPrefab;
     public GameObject deskPrefab;
     public GameObject lampPrefab;
+    public GameObject bookshelfPrefab;
     public Sprite[] bedSprites;
     public Sprite[] chairSprites;
     public Sprite[] deskSprites;
     public Sprite[] lampSprites;
+    public Sprite[] bookshelfSprites;
 
     [Header("Audio")]
     public AudioSource musicSource;      // For background music
@@ -193,28 +195,34 @@ public class FirebaseController : MonoBehaviour
         if (shopDatabase == null) return;
 
         // Map sprites to item IDs
-        for (int i = 0; i < bedSprites.Length && i < 4; i++)
+        for (int i = 0; i < bedSprites.Length && i < 10; i++)
         {
             if (bedSprites[i] != null)
                 shopDatabase.SetSprite($"bed{i + 1}", bedSprites[i]);
         }
 
-        for (int i = 0; i < chairSprites.Length && i < 4; i++)
+        for (int i = 0; i < chairSprites.Length && i < 10; i++)
         {
             if (chairSprites[i] != null)
                 shopDatabase.SetSprite($"chair{i + 1}", chairSprites[i]);
         }
 
-        for (int i = 0; i < deskSprites.Length && i < 4; i++)
+        for (int i = 0; i < deskSprites.Length && i < 10; i++)
         {
             if (deskSprites[i] != null)
                 shopDatabase.SetSprite($"desk{i + 1}", deskSprites[i]);
         }
 
-        for (int i = 0; i < lampSprites.Length && i < 4; i++)
+        for (int i = 0; i < lampSprites.Length && i < 10; i++)
         {
             if (lampSprites[i] != null)
                 shopDatabase.SetSprite($"lamp{i + 1}", lampSprites[i]);
+        }
+
+        for (int i = 0; i < bookshelfSprites.Length && i < 10; i++)
+        {
+            if (bookshelfSprites[i] != null)
+                shopDatabase.SetSprite($"bookshelf{i + 1}", bookshelfSprites[i]);
         }
     }
 
@@ -1080,6 +1088,13 @@ public class FirebaseController : MonoBehaviour
 
         GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
 
+        // Apply scale from ShopItem
+        ShopItem shopItem = shopDatabase.GetItem(itemId);
+        if (shopItem != null)
+        {
+            furnitureObj.transform.localScale = Vector3.one * shopItem.Scale;
+        }
+
         // Set the correct sprite for this specific item variant
         UnityEngine.UI.Image img = furnitureObj.GetComponent<UnityEngine.UI.Image>();
         if (img != null)
@@ -1108,7 +1123,7 @@ public class FirebaseController : MonoBehaviour
         Vector2 position = GetSavedPosition(itemId, itemType);
         draggable.SetPosition(position);
 
-        // NEW: Restore layer order
+        // Restore layer order
         if (currentPlayer.HomeItemLayers != null &&
             currentPlayer.HomeItemLayers.TryGetValue(itemId, out int savedLayer))
         {
@@ -1134,6 +1149,7 @@ public class FirebaseController : MonoBehaviour
             case "chair": return new Vector2(150, 100);
             case "desk": return new Vector2(-150, -100);
             case "lamp": return new Vector2(150, -100);
+            case "bookshelf": return new Vector2(0, -150);
             default: return Vector2.zero;
         }
     }
@@ -1147,6 +1163,7 @@ public class FirebaseController : MonoBehaviour
             case "chair": return chairPrefab;
             case "desk": return deskPrefab;
             case "lamp": return lampPrefab;
+            case "bookshelf": return bookshelfPrefab;
             default: return null;
         }
     }
