@@ -50,6 +50,7 @@ public class FirebaseController : MonoBehaviour
 
     private SleepLog logBeingEdited;         // Internal reference
     public TMP_InputField sleepDateInput;
+    public TMP_Text sleepStreakText;
 
 
     [Header("Swap Prompt UI")]
@@ -373,6 +374,12 @@ public class FirebaseController : MonoBehaviour
         {
             RecalculateSleepStreak();
             DisplaySleepLogs();
+
+            if (sleepStreakText != null)
+            {
+                string dayText = currentPlayer.SleepLogStreak == 1 ? "day" : "days";
+                sleepStreakText.text = $"Current Streak: {currentPlayer.SleepLogStreak} {dayText}";
+            }
         }
     }
 
@@ -1374,7 +1381,6 @@ public class FirebaseController : MonoBehaviour
     {
         if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
 
-        // Parse hours
         if (!float.TryParse(sleepHoursInput.text, out float hours))
         {
             showNotificationMessage("Error", "Please enter valid sleep hours.");
@@ -1382,7 +1388,6 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        // Validate hours 
         if (hours < 0 || hours > 24)
         {
             showNotificationMessage("Error", "Sleep hours must be between 0 and 24.");
@@ -1392,17 +1397,14 @@ public class FirebaseController : MonoBehaviour
         DateTime selectedDate = DateTime.Today;
         string dateString = selectedDate.ToString("yyyy-MM-dd");
 
-        // Check if log exists for this date
         SleepLog existing = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == dateString);
         if (existing != null)
         {
-            existing.Hours = hours; // overwrite existing entry for today
+            existing.Hours = hours;
         }
         else
         {
             currentPlayer.SleepLogs.Add(new SleepLog { Date = dateString, Hours = hours });
-
-            // Update sleep streak
             UpdateSleepStreak(dateString);
         }
 
@@ -1411,8 +1413,13 @@ public class FirebaseController : MonoBehaviour
         sleepHoursInput.text = "";
         showNotificationMessage("Success", $"Logged {hours} hours of sleep for today!");
         DisplaySleepLogs();
+        
+        // Update streak display
+        if (sleepStreakText != null)
+        {
+            sleepStreakText.text = $"Current Streak: {currentPlayer.SleepLogStreak} days";
+        }
 
-        // Refresh goals to update streak display
         GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
         if (goalsManager != null)
         {
@@ -1475,42 +1482,41 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        // Sort logs by date
-        var sortedLogs = currentPlayer.SleepLogs
-            .Where(log => !string.IsNullOrEmpty(log.Date) && log.Hours > 0)
-            .OrderBy(log => log.Date)
-            .ToList();
-
-        if (sortedLogs.Count == 0)
+        DateTime today = DateTime.Today;
+        string todayString = today.ToString("yyyy-MM-dd");
+        
+        // Check if today has a log entry
+        bool hasLoggedToday = currentPlayer.SleepLogs.Any(log => log.Date == todayString && log.Hours > 0);
+        
+        if (!hasLoggedToday)
         {
             currentPlayer.SleepLogStreak = 0;
             currentPlayer.LastSleepLogDate = "";
             return;
         }
 
-        int streak = 1;
-        string lastDate = sortedLogs.Last().Date;
+        // Count consecutive days backwards from today
+        int streak = 0;
+        DateTime currentDate = today;
 
-        // Calculate consecutive days from most recent
-        for (int i = sortedLogs.Count - 1; i > 0; i--)
+        for (int i = 0; i < 365; i++) // Check up to a year back
         {
-            DateTime currentDay = DateTime.Parse(sortedLogs[i].Date);
-            DateTime previousDay = DateTime.Parse(sortedLogs[i - 1].Date);
-            TimeSpan difference = currentDay - previousDay;
+            string dateString = currentDate.ToString("yyyy-MM-dd");
+            bool hasLog = currentPlayer.SleepLogs.Any(log => log.Date == dateString && log.Hours > 0);
 
-            if (difference.Days == 1)
+            if (hasLog)
             {
                 streak++;
+                currentDate = currentDate.AddDays(-1);
             }
-            else if (difference.Days > 1)
+            else
             {
                 break; // Streak broken
             }
-            // If same day, continue without breaking streak
         }
 
         currentPlayer.SleepLogStreak = streak;
-        currentPlayer.LastSleepLogDate = lastDate;
+        currentPlayer.LastSleepLogDate = todayString;
         
         Debug.Log($"Recalculated streak: {currentPlayer.SleepLogStreak} days");
     }
