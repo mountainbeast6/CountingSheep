@@ -18,6 +18,10 @@ public class PlayerData
     [FirestoreProperty] public List<CustomGoal> CustomGoals { get; set; }
     [FirestoreProperty] public int SleepLogStreak { get; set; } = 0;
     [FirestoreProperty] public string LastSleepLogDate { get; set; } = "";
+    [FirestoreProperty] public int Level { get; set; } = 1;
+    [FirestoreProperty] public int XP { get; set; } = 0;
+    [FirestoreProperty] public string LastLoginDate { get; set; } = "";
+    [FirestoreProperty] public string LastGoalResetDate { get; set; } = "";
 }
 
 [FirestoreData]
