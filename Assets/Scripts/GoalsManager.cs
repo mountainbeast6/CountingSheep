@@ -118,9 +118,6 @@ public class GoalsManager : MonoBehaviour
         if (weeklyCompletedPanel != null)
             weeklyCompletedPanel.SetActive(false); // Weekly starts hidden
 
-        // Check for daily reset
-        CheckDailyReset();
-
         // Initialize predefined goals
         InitializePredefinedGoals();
 
@@ -189,31 +186,51 @@ public class GoalsManager : MonoBehaviour
         });
     }
 
-    private void CheckDailyReset()
+    public async void CheckAndResetDailyGoals()
     {
+        if (firebaseController?.currentPlayer == null || string.IsNullOrEmpty(firebaseController.currentUserId)) 
+        {
+            Debug.LogWarning("Cannot check daily reset - no player data");
+            return;
+        }
+
         string today = System.DateTime.Today.ToString("yyyy-MM-dd");
-        string lastResetDate = PlayerPrefs.GetString("LastGoalResetDate", "");
+        string lastResetDate = firebaseController.currentPlayer.LastGoalResetDate;
+
+        Debug.Log($"Checking daily reset. Today: {today}, Last reset: {lastResetDate}");
 
         // If it's a new day, reset daily goals
-        if (lastResetDate != today)
+        if (string.IsNullOrEmpty(lastResetDate) || lastResetDate != today)
         {
+            Debug.Log("Resetting daily goals!");
             ResetDailyGoals();
             
             // Check if it's a new week (Monday)
             if (System.DateTime.Today.DayOfWeek == DayOfWeek.Monday)
             {
+                Debug.Log("It's Monday - resetting weekly goals too!");
                 ResetWeeklyGoals();
             }
             
-            PlayerPrefs.SetString("LastGoalResetDate", today);
-            PlayerPrefs.Save();
+            // Update the reset date in Firebase
+            firebaseController.currentPlayer.LastGoalResetDate = today;
+            await firebaseController.firestoreService.SavePlayerAsync(
+                firebaseController.currentUserId, 
+                firebaseController.currentPlayer
+            );
+            
+            Debug.Log($"Saved new reset date: {today}");
+        }
+        else
+        {
+            Debug.Log("Goals already reset today - no action needed");
         }
     }
 
     private void ResetWeeklyGoals()
     {
-        // Reset only weekly goals
-        foreach (var goal in allGoals.Where(g => g.IsWeekly && !g.IsCompleted))
+        // Reset only weekly goals in allGoals list
+        foreach (var goal in allGoals.Where(g => g.IsWeekly))
         {
             goal.IsCompleted = false;
         }
@@ -221,6 +238,14 @@ public class GoalsManager : MonoBehaviour
         // Remove completed weekly goals from Firebase
         if (firebaseController?.currentPlayer != null)
         {
+            // Remove weekly goals from CompletedGoals list
+            if (firebaseController.currentPlayer.CompletedGoals != null)
+            {
+                // Get IDs of weekly goals to remove
+                var weeklyGoalIds = allGoals.Where(g => g.IsWeekly).Select(g => g.Id).ToList();
+                firebaseController.currentPlayer.CompletedGoals.RemoveAll(id => weeklyGoalIds.Contains(id));
+            }
+            
             // Reset custom weekly goals completion status
             if (firebaseController.currentPlayer.CustomGoals != null)
             {
@@ -245,8 +270,8 @@ public class GoalsManager : MonoBehaviour
 
     private void ResetDailyGoals()
     {
-        // Reset only daily goals
-        foreach (var goal in allGoals.Where(g => g.IsDaily && !g.IsCompleted))
+        // Reset only daily goals in allGoals list
+        foreach (var goal in allGoals.Where(g => g.IsDaily))
         {
             goal.IsCompleted = false;
         }
@@ -254,12 +279,12 @@ public class GoalsManager : MonoBehaviour
         // Remove completed daily goals from Firebase
         if (firebaseController?.currentPlayer != null)
         {
-            // Clear completed goals that are daily
+            // Remove daily goals from CompletedGoals list
             if (firebaseController.currentPlayer.CompletedGoals != null)
             {
-                // We need to track which goals are daily to know which to reset
-                // For now, we'll reset all predefined goals (which are daily)
-                firebaseController.currentPlayer.CompletedGoals.Clear();
+                // Get IDs of daily goals to remove
+                var dailyGoalIds = allGoals.Where(g => g.IsDaily).Select(g => g.Id).ToList();
+                firebaseController.currentPlayer.CompletedGoals.RemoveAll(id => dailyGoalIds.Contains(id));
             }
             
             // Reset custom daily goals completion status
@@ -267,9 +292,7 @@ public class GoalsManager : MonoBehaviour
             {
                 foreach (var customGoal in firebaseController.currentPlayer.CustomGoals)
                 {
-                    // Find if this custom goal is marked as daily
-                    var goal = allGoals.FirstOrDefault(g => g.Id == customGoal.Id);
-                    if (goal != null && goal.IsDaily)
+                    if (customGoal.IsDaily)
                     {
                         customGoal.IsCompleted = false;
                     }

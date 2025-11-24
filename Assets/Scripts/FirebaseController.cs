@@ -20,7 +20,7 @@ public class FirebaseController : MonoBehaviour
     public TMP_InputField loginEmail, loginPassword, signupEmail, signupPassword, signupCPassword, signupUserName, resetPassEmail;
 
     [Header("UI Texts")]
-    public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text, userMoney;
+    public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text, userMoney, profileLevelText, profileXPText;
 
     [Header("Other UI")]
     public Toggle rememberMe;
@@ -337,6 +337,7 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(true);
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
+        UpdateProfileLevelDisplay();
     }
 
     public void OpenGoalsPanel()
@@ -355,9 +356,10 @@ public class FirebaseController : MonoBehaviour
         inventoryPanel.SetActive(false);
 
         // Find GoalsManager and display goals
-        GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
+        GoalsManager goalsManager = FindFirstObjectByType<GoalsManager>();
         if (goalsManager != null)
         {
+            goalsManager.CheckAndResetDailyGoals();
             goalsManager.DisplayGoals();
         }
     }
@@ -491,6 +493,15 @@ public class FirebaseController : MonoBehaviour
             userMoney.text = player.Money.ToString();
             profileUserName_Text.text = player.Name;
             profileUserEmail_Text.text = player.Email;
+            UpdateProfileLevelDisplay();
+            await CheckDailyLoginBonus();
+
+            GoalsManager goalsManager = FindFirstObjectByType<GoalsManager>();
+            if (goalsManager != null)
+            {
+                goalsManager.CheckAndResetDailyGoals(); // Trigger the reset check
+            }
+
             OpenHomePanel();
             DisplaySleepLogs();
             
@@ -567,7 +578,7 @@ public class FirebaseController : MonoBehaviour
             userMoney.text = newPlayer.Money.ToString();
             profileUserName_Text.text = newPlayer.Name;
             profileUserEmail_Text.text = newPlayer.Email;
-
+            UpdateProfileLevelDisplay();
             OpenHomePanel();
         }
         catch (FirebaseException ex)
@@ -675,7 +686,94 @@ public class FirebaseController : MonoBehaviour
         OpenLoginPanel();
     }
 
-    // -----------------SHOP-------------------------------------
+    // ------------------------- Player XP -----------------------------------------
+    public int GetXPForNextLevel(int currentLevel)
+    {
+        // Each level requires 100 * level XP
+        // Level 1->2 needs 100 XP, Level 2->3 needs 200 XP, etc.
+        return 100 * currentLevel;
+    }
+
+    public void UpdateProfileLevelDisplay()
+    {
+        if (currentPlayer != null)
+        {
+            if (profileLevelText != null)
+                profileLevelText.text = $"Level {currentPlayer.Level}";
+            
+            if (profileXPText != null)
+            {
+                int xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+                profileXPText.text = $"XP: {currentPlayer.XP} / {xpNeeded}";
+            }
+        }
+    }
+
+    public async void AddXP(int amount)
+    {
+        if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
+
+        currentPlayer.XP += amount;
+        
+        // Check for level up
+        int xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+        while (currentPlayer.XP >= xpNeeded)
+        {
+            currentPlayer.XP -= xpNeeded;
+            currentPlayer.Level++;
+            
+            // Show level up notification
+            showNotificationMessage("Level Up!", $"You are now Level {currentPlayer.Level}!");
+            
+            // Recalculate XP needed for next level
+            xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+        }
+        
+        // Save to database
+        await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+        
+        // Update UI
+        UpdateProfileLevelDisplay();
+    }
+
+    public async Task CheckDailyLoginBonus()
+    {
+        if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
+        
+        string today = System.DateTime.Today.ToString("yyyy-MM-dd");
+        
+        // Check if player already got login bonus today
+        if (currentPlayer.LastLoginDate != today)
+        {
+            // Give daily login bonus (10 XP)
+            currentPlayer.XP += 10;
+            
+            // Check for level up
+            int xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+            while (currentPlayer.XP >= xpNeeded)
+            {
+                currentPlayer.XP -= xpNeeded;
+                currentPlayer.Level++;
+                
+                showNotificationMessage("Level Up!", $"You are now Level {currentPlayer.Level}!");
+                
+                xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+            }
+            
+            // Update last login date
+            currentPlayer.LastLoginDate = today;
+            
+            // Save to Firebase
+            await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+            
+            // Update UI
+            UpdateProfileLevelDisplay();
+            
+            showNotificationMessage("Daily Bonus", "+10 XP for logging in today!");
+        }
+    }
+
+    // -----------------SHOP-------------------------------------------------
     public async void BuyShopItem(string itemId)
     {
         if (string.IsNullOrEmpty(currentUserId))
@@ -940,7 +1038,7 @@ public class FirebaseController : MonoBehaviour
         DisplayHomeItems();
     }
 
-    // Replace your existing ShowSwapPrompt method with this:
+    
     private void ShowSwapPrompt(string itemType, string currentHomeItemId, string newItemId)
     {
         swapPromptPanel.SetActive(true);
@@ -954,7 +1052,7 @@ public class FirebaseController : MonoBehaviour
             PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
             if (player == null) return;
 
-            // Swap: move old home item back to inventory
+            
             if (!player.Inventory.Contains(currentHomeItemId))
                 player.Inventory.Add(currentHomeItemId);
 
@@ -970,7 +1068,7 @@ public class FirebaseController : MonoBehaviour
         swapNoButton.onClick.AddListener(() =>
         {
             swapPromptPanel.SetActive(false);
-            // Do nothing else - just close the prompt
+            
         });
     }
 
