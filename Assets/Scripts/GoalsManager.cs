@@ -204,6 +204,10 @@ public class GoalsManager : MonoBehaviour
         {
             Debug.Log("Resetting daily goals!");
             ResetDailyGoals();
+            firebaseController.currentPlayer.DailyGoalXP = 0;
+            firebaseController.currentPlayer.DailyGoalMoney = 0;
+            firebaseController.currentPlayer.LastGoalRewardDate = today;
+
             
             // Check if it's a new week (Monday)
             if (System.DateTime.Today.DayOfWeek == DayOfWeek.Monday)
@@ -218,7 +222,8 @@ public class GoalsManager : MonoBehaviour
                 firebaseController.currentUserId, 
                 firebaseController.currentPlayer
             );
-            
+
+            firebaseController.UpdateDailyLimitUI();
             Debug.Log($"Saved new reset date: {today}");
         }
         else
@@ -460,8 +465,46 @@ public class GoalsManager : MonoBehaviour
         // Mark goal as completed
         goal.IsCompleted = true;
 
-        // Add money to player
+        // ----- Daily reward cap -----
+        string today = System.DateTime.Today.ToString("yyyy-MM-dd");
+
+        // Reset if it's a new day
+        if (firebaseController.currentPlayer.LastGoalRewardDate != today)
+        {
+            firebaseController.currentPlayer.DailyGoalXP = 0;
+            firebaseController.currentPlayer.DailyGoalMoney = 0;
+            firebaseController.currentPlayer.LastGoalRewardDate = today;
+        }
+
+        // Set your caps (you can tune these numbers)
+        int dailyMoneyCap = 200;
+        int dailyXPCap = 150;
+
+        // Check if reward would exceed cap
+        if (firebaseController.currentPlayer.DailyGoalMoney + goal.Reward > dailyMoneyCap)
+        {
+            // Notify user (optional)
+            firebaseController.showNotificationMessage(
+                "Limit Reached",
+                "You reached today's goal reward limit."
+            );
+            return;
+        }
+
+        // Give money only if under cap
         firebaseController.currentPlayer.Money += goal.Reward;
+        firebaseController.currentPlayer.DailyGoalMoney += goal.Reward;
+
+        // XP reward (optional)
+        int xpReward = goal.Reward / 2;  // Example: reward 50 gives 25 XP
+
+        if (firebaseController.currentPlayer.DailyGoalXP + xpReward <= dailyXPCap)
+        {
+            firebaseController.AddXP(xpReward);
+            firebaseController.currentPlayer.DailyGoalXP += xpReward;
+        }
+
+        firebaseController.UpdateDailyLimitUI();
 
         // Add to CompletedGoals
         if (firebaseController.currentPlayer.CompletedGoals == null)

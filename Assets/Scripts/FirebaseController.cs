@@ -22,6 +22,10 @@ public class FirebaseController : MonoBehaviour
     [Header("UI Texts")]
     public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text, userMoney, profileLevelText, profileXPText;
 
+    [Header("Daily Limit UI")]
+    public TMP_Text dailyXPText;
+    public TMP_Text dailyMoneyText;
+
     [Header("Other UI")]
     public Toggle rememberMe;
     public Button loginButton, signupButton;
@@ -362,6 +366,7 @@ public class FirebaseController : MonoBehaviour
             goalsManager.CheckAndResetDailyGoals();
             goalsManager.DisplayGoals();
         }
+        UpdateDailyLimitUI();
     }
 
     public void OpenStatsPanel()
@@ -495,6 +500,7 @@ public class FirebaseController : MonoBehaviour
             profileUserEmail_Text.text = player.Email;
             UpdateProfileLevelDisplay();
             await CheckDailyLoginBonus();
+            UpdateDailyLimitUI();
 
             GoalsManager goalsManager = FindFirstObjectByType<GoalsManager>();
             if (goalsManager != null)
@@ -772,6 +778,21 @@ public class FirebaseController : MonoBehaviour
             showNotificationMessage("Daily Bonus", "+10 XP for logging in today!");
         }
     }
+
+    public void UpdateDailyLimitUI()
+    {
+        if (currentPlayer == null) return;
+
+        int xpCap = 150;
+        int moneyCap = 200;
+
+        if (dailyXPText != null)
+            dailyXPText.text = $"Daily XP Gained: {currentPlayer.DailyGoalXP} / {xpCap}";
+
+        if (dailyMoneyText != null)
+            dailyMoneyText.text = $"Daily Coins Gained: {currentPlayer.DailyGoalMoney} / {moneyCap}";
+    }
+
 
     // -----------------SHOP-------------------------------------------------
     public async void BuyShopItem(string itemId)
