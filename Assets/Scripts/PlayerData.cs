@@ -22,6 +22,10 @@ public class PlayerData
     [FirestoreProperty] public int XP { get; set; } = 0;
     [FirestoreProperty] public string LastLoginDate { get; set; } = "";
     [FirestoreProperty] public string LastGoalResetDate { get; set; } = "";
+    [FirestoreProperty] public int DailyGoalXP { get; set; } = 0;
+    [FirestoreProperty] public int DailyGoalMoney { get; set; } = 0;
+    [FirestoreProperty] public string LastGoalRewardDate { get; set; } = "";
+
 }
 
 [FirestoreData]
