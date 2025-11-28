@@ -25,6 +25,7 @@ public class PlayerData
     [FirestoreProperty] public int DailyGoalXP { get; set; } = 0;
     [FirestoreProperty] public int DailyGoalMoney { get; set; } = 0;
     [FirestoreProperty] public string LastGoalRewardDate { get; set; } = "";
+    [FirestoreProperty] public List<string> SeenTutorials { get; set; } = new List<string>();
 
 }
 

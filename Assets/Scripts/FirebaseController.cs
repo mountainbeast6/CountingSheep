@@ -83,6 +83,9 @@ public class FirebaseController : MonoBehaviour
     public Sprite[] lampSprites;
     public Sprite[] bookshelfSprites;
 
+    [Header("Tutorial")]
+    public TutorialManager tutorialManager;
+
     [Header("Audio")]
     public AudioSource musicSource;      // For background music
     public AudioSource sfxSource;        // For sound effects
@@ -124,6 +127,15 @@ public class FirebaseController : MonoBehaviour
         notificationPanel?.SetActive(false);
 
         firestoreService = new FirestoreService();
+
+        if (tutorialManager == null)
+        {
+            tutorialManager = FindObjectOfType<TutorialManager>();
+            if (tutorialManager == null)
+            {
+                Debug.LogWarning("TutorialManager not found in scene!");
+            }
+        }
 
         loginButton.interactable = false;
         signupButton.interactable = false;
@@ -323,6 +335,13 @@ public class FirebaseController : MonoBehaviour
         DisplayHomeItems();
 
         hasInitialized = true;
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Home", 
+            "Welcome to Your Home!", 
+            "This is your personal space! Tap the inventory button to place furniture you've purchased. You can drag items around to decorate your home.");
+        }
     }
 
     public void OpenProfilePanel()
@@ -342,6 +361,13 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
         UpdateProfileLevelDisplay();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Profile", 
+            "Your Profile", 
+            "View your level, XP progress, and account information here.");
+        }
     }
 
     public void OpenGoalsPanel()
@@ -367,6 +393,13 @@ public class FirebaseController : MonoBehaviour
             goalsManager.DisplayGoals();
         }
         UpdateDailyLimitUI();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Goals", 
+            "Goals Panel", 
+            "Here you can see and complete your daily goals to earn XP and coins!");
+        }
     }
 
     public void OpenStatsPanel()
@@ -396,6 +429,13 @@ public class FirebaseController : MonoBehaviour
                 sleepStreakText.text = $"Current Streak: {currentPlayer.SleepLogStreak} {dayText}";
             }
         }
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Stats", 
+            "Sleep Statistics", 
+            "Track your sleep patterns here! Log your sleep hours and view your sleep streak.");
+        }
     }
 
     public void OpenSettingsPanel()
@@ -414,6 +454,13 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(true);
         inventoryPanel.SetActive(false);
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Settings", 
+            "Settings", 
+            "Adjust audio settings and manage your preferences here.");
+        }
     }
 
     public void OpenShopPanel()
@@ -433,6 +480,13 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
         PopulateShop();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Shop", 
+            "Shop", 
+            "Buy furniture and items for your home here! Each purchase will be added to your inventory.");
+        }
     }
 
     // -------------------- Notifications --------------------
@@ -501,6 +555,11 @@ public class FirebaseController : MonoBehaviour
             UpdateProfileLevelDisplay();
             await CheckDailyLoginBonus();
             UpdateDailyLimitUI();
+
+            if (tutorialManager != null)
+            {
+                await tutorialManager.LoadSeenTutorials(currentUserId);
+            }
 
             GoalsManager goalsManager = FindFirstObjectByType<GoalsManager>();
             if (goalsManager != null)
@@ -585,6 +644,12 @@ public class FirebaseController : MonoBehaviour
             profileUserName_Text.text = newPlayer.Name;
             profileUserEmail_Text.text = newPlayer.Email;
             UpdateProfileLevelDisplay();
+
+            if (tutorialManager != null)
+            {
+                await tutorialManager.LoadSeenTutorials(currentUserId);
+            }
+
             OpenHomePanel();
         }
         catch (FirebaseException ex)
