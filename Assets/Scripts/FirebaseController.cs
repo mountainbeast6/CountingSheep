@@ -875,6 +875,14 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
+        // Check level requirement
+        if (currentPlayer != null && currentPlayer.Level < item.LevelRequirement)
+        {
+            showNotificationMessage("Locked", $"You need to reach Level {item.LevelRequirement} to purchase this item!");
+            return;
+        }
+
+        // Rest of existing BuyShopItem method remains the same...
         // Spend money
         bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
         if (success)
@@ -943,9 +951,20 @@ public class FirebaseController : MonoBehaviour
             // Create shop button for items not yet owned
             GameObject buttonObj = Instantiate(shopButtonPrefab, shopContent);
 
-            // Update the button text to show item name and cost
+            // Check if player meets level requirement
+            bool meetsLevelRequirement = currentPlayer != null && currentPlayer.Level >= item.LevelRequirement;
+
+            // Update the button text to show item name, cost, and level requirement if needed
             TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
-            buttonText.text = $"{item.Name}\n${item.Cost}";
+            if (meetsLevelRequirement)
+            {
+                buttonText.text = $"{item.Name}\n${item.Cost}";
+            }
+            else
+            {
+                buttonText.text = $"{item.Name}\nLevel {item.LevelRequirement}+";
+                buttonText.color = Color.gray; // Make text gray for locked items
+            }
 
             // Set the sprite if available
             Sprite itemSprite = shopDatabase.GetSprite(item.Id);
@@ -969,13 +988,38 @@ public class FirebaseController : MonoBehaviour
                 {
                     spriteImage.sprite = itemSprite;
                     spriteImage.preserveAspect = true; // Maintain aspect ratio
+                    
+                    // Make sprite semi-transparent if locked
+                    if (!meetsLevelRequirement)
+                    {
+                        spriteImage.color = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Gray and semi-transparent
+                    }
+                    else
+                    {
+                        spriteImage.color = Color.white; // Normal color
+                    }
                 }
             }
 
             // Set up the buy button
             Button buyButton = buttonObj.GetComponent<Button>();
             string itemId = item.Id; // Capture for closure
-            buyButton.onClick.AddListener(() => BuyShopItem(itemId));
+            
+            if (meetsLevelRequirement)
+            {
+                // Item is unlocked - allow purchase
+                buyButton.onClick.AddListener(() => BuyShopItem(itemId));
+                buyButton.interactable = true;
+            }
+            else
+            {
+                // Item is locked - show message when clicked
+                buyButton.onClick.AddListener(() => 
+                {
+                    showNotificationMessage("Locked", $"Reach Level {item.LevelRequirement} to unlock this item!");
+                });
+                buyButton.interactable = true; // Keep interactable to show the message
+            }
         }
     }
 
