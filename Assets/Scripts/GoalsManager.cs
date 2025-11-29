@@ -487,38 +487,58 @@ public class GoalsManager : MonoBehaviour
         int dailyMoneyCap = 200;
         int dailyXPCap = 150;
 
-        // Calculate rewards
-        int coinReward = goal.Reward;
-        int xpReward = goal.Reward / 2;
+        // Calculate base rewards
+        int fullCoinReward = goal.Reward;
+        int fullXPReward = goal.Reward / 2;
 
-        bool canGiveCoins = firebaseController.currentPlayer.DailyGoalMoney + coinReward <= dailyMoneyCap;
-        bool canGiveXP = firebaseController.currentPlayer.DailyGoalXP + xpReward <= dailyXPCap;
+        // Calculate how much we can actually give without exceeding caps
+        int coinReward = Mathf.Min(fullCoinReward, dailyMoneyCap - firebaseController.currentPlayer.DailyGoalMoney);
+        int xpReward = Mathf.Min(fullXPReward, dailyXPCap - firebaseController.currentPlayer.DailyGoalXP);
 
-        // Allow goal completion even if limits are reached, but only give rewards that don't exceed limits
-        if (canGiveCoins)
+        // Ensure rewards are not negative
+        coinReward = Mathf.Max(0, coinReward);
+        xpReward = Mathf.Max(0, xpReward);
+
+        // Give rewards
+        if (coinReward > 0)
         {
             firebaseController.currentPlayer.Money += coinReward;
             firebaseController.currentPlayer.DailyGoalMoney += coinReward;
         }
 
-        if (canGiveXP)
+        if (xpReward > 0)
         {
             firebaseController.AddXP(xpReward);
             firebaseController.currentPlayer.DailyGoalXP += xpReward;
         }
 
-        // Notify user if they hit any limits
-        if (!canGiveCoins || !canGiveXP)
+        // Notify user about partial rewards
+        string rewardMessage = "";
+        if (coinReward < fullCoinReward && xpReward < fullXPReward)
         {
-            string limitMessage = "";
-            if (!canGiveCoins && !canGiveXP)
-                limitMessage = "Daily coin and XP limits reached. Goal completed but no rewards given.";
-            else if (!canGiveCoins)
-                limitMessage = "Daily coin limit reached. Goal completed but no coins given.";
-            else if (!canGiveXP)
-                limitMessage = "Daily XP limit reached. Goal completed but no XP given.";
-            
-            firebaseController.showNotificationMessage("Limit Reached", limitMessage);
+            if (coinReward == 0 && xpReward == 0)
+                rewardMessage = "Daily limits reached. Goal completed but no rewards given.";
+            else
+                rewardMessage = $"Partial rewards given! +${coinReward} coins, +{xpReward} XP (daily limits reached)";
+        }
+        else if (coinReward < fullCoinReward)
+        {
+            if (coinReward == 0)
+                rewardMessage = $"Daily coin limit reached. +{xpReward} XP only.";
+            else
+                rewardMessage = $"Partial coin reward! +${coinReward} coins, +{xpReward} XP";
+        }
+        else if (xpReward < fullXPReward)
+        {
+            if (xpReward == 0)
+                rewardMessage = $"Daily XP limit reached. +${coinReward} coins only.";
+            else
+                rewardMessage = $"Partial XP reward! +${coinReward} coins, +{xpReward} XP";
+        }
+
+        if (!string.IsNullOrEmpty(rewardMessage))
+        {
+            firebaseController.showNotificationMessage("Reward Info", rewardMessage);
         }
 
         firebaseController.UpdateDailyLimitUI();
@@ -551,12 +571,12 @@ public class GoalsManager : MonoBehaviour
             Debug.LogError($"Failed to save goal completion: {ex.Message}");
             // Revert changes if save failed
             goal.IsCompleted = false;
-            if (canGiveCoins)
+            if (coinReward > 0)
             {
                 firebaseController.currentPlayer.Money -= coinReward;
                 firebaseController.currentPlayer.DailyGoalMoney -= coinReward;
             }
-            if (canGiveXP)
+            if (xpReward > 0)
             {
                 // Note: XP might have leveled up, so this is tricky to revert
                 // For simplicity, we'll just not revert XP changes on error
@@ -565,7 +585,7 @@ public class GoalsManager : MonoBehaviour
         }
 
         // Update UI
-        if (firebaseController.userMoney != null && canGiveCoins)
+        if (firebaseController.userMoney != null && coinReward > 0)
             firebaseController.userMoney.text = firebaseController.currentPlayer.Money.ToString();
 
         // Refresh goals display
@@ -583,6 +603,20 @@ public class GoalsManager : MonoBehaviour
             if (dailyGoalToggle != null) dailyGoalToggle.isOn = false;
             if (oneTimeGoalToggle != null) oneTimeGoalToggle.isOn = true;
             if (reward10Toggle != null) reward10Toggle.isOn = true;
+
+            ShowAddGoalTutorial();
+        }
+    }
+
+    private void ShowAddGoalTutorial()
+    {
+        // Get the TutorialManager and show the AddGoal tutorial
+        TutorialManager tutorialManager = FindObjectOfType<TutorialManager>();
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("AddGoal", 
+                "Create Custom Goals", 
+                "Create your own goals here! Set a name, choose a reward amount (10, 50, or 100 coins), and select the goal type:\n\n• Daily: Resets every day\n• Weekly: Resets every Monday\n• One-time: Complete once and done\n\nCustom goals help you track personal habits and earn extra rewards!");
         }
     }
 

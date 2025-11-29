@@ -110,22 +110,4 @@ public class TutorialManager : MonoBehaviour
         if (tutorialPanel != null)
             tutorialPanel.SetActive(false);
     }
-
-    // Optional: Reset all tutorials (useful for testing or settings)
-    public async void ResetAllTutorials()
-    {
-        if (firebaseController?.currentPlayer == null || 
-            string.IsNullOrEmpty(firebaseController.currentUserId))
-            return;
-
-        seenTutorials.Clear();
-        firebaseController.currentPlayer.SeenTutorials = new List<string>();
-        
-        await firebaseController.firestoreService.SavePlayerAsync(
-            firebaseController.currentUserId, 
-            firebaseController.currentPlayer
-        );
-        
-        Debug.Log("All tutorials reset!");
-    }
 }

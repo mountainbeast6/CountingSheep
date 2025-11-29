@@ -96,6 +96,7 @@ public class FirebaseController : MonoBehaviour
     public AudioClip placeItemSound;     // Place item sound effect
     public AudioClip clickSound;
     public AudioClip inventorySound;
+    public AudioClip levelUpSound;
 
     [Header("Audio Settings UI")]
     public Slider volumeSlider;
@@ -340,7 +341,7 @@ public class FirebaseController : MonoBehaviour
         {
             tutorialManager.ShowTutorial("Home", 
             "Welcome to Your Home!", 
-            "This is your personal space! Tap the inventory button to place furniture you've purchased. You can drag items around to decorate your home.");
+            "This is your personal space. Tap the Items button to open your inventory and place any furniture you’ve bought. Drag items to arrange and decorate your home.");
         }
     }
 
@@ -366,7 +367,7 @@ public class FirebaseController : MonoBehaviour
         {
             tutorialManager.ShowTutorial("Profile", 
             "Your Profile", 
-            "View your level, XP progress, and account information here.");
+            "View your level, XP progress, and account information here. You can earn a limited amount of XP and Coins each day.");
         }
     }
 
@@ -398,7 +399,7 @@ public class FirebaseController : MonoBehaviour
         {
             tutorialManager.ShowTutorial("Goals", 
             "Goals Panel", 
-            "Here you can see and complete your daily goals to earn XP and coins!");
+            "Here you can see and complete your daily goals to earn XP and coins! You can also add your own goals!");
         }
     }
 
@@ -434,7 +435,7 @@ public class FirebaseController : MonoBehaviour
         {
             tutorialManager.ShowTutorial("Stats", 
             "Sleep Statistics", 
-            "Track your sleep patterns here! Log your sleep hours and view your sleep streak.");
+            "Track your sleep patterns here! Log your sleep hours and view your sleep streak. The Sleep Graph shows your hours for each day of the week:\n\n<color=#FF0000>Red</color> means low sleep\n<color=#FFFF00>Yellow</color> means decent sleep\n<color=#00FF00>Green</color> means good sleep");
         }
     }
 
@@ -485,7 +486,7 @@ public class FirebaseController : MonoBehaviour
         {
             tutorialManager.ShowTutorial("Shop", 
             "Shop", 
-            "Buy furniture and items for your home here! Each purchase will be added to your inventory.");
+            "Buy furniture and items for your home here! Each purchase will be added to your inventory. Level up to unlock more items to purchase!");
         }
     }
 
@@ -795,6 +796,7 @@ public class FirebaseController : MonoBehaviour
             
             // Show level up notification
             showNotificationMessage("Level Up!", $"You are now Level {currentPlayer.Level}!");
+            PlayLevelUpSound();
             
             // Recalculate XP needed for next level
             xpNeeded = GetXPForNextLevel(currentPlayer.Level);
@@ -1430,6 +1432,14 @@ public class FirebaseController : MonoBehaviour
 
             // Play next song
             PlayBackgroundMusic();
+        }
+    }
+
+    private void PlayLevelUpSound()
+    {
+        if (sfxSource != null && levelUpSound != null)
+        {
+            sfxSource.PlayOneShot(levelUpSound);
         }
     }
 
