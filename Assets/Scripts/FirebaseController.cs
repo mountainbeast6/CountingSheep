@@ -83,6 +83,9 @@ public class FirebaseController : MonoBehaviour
     public Sprite[] lampSprites;
     public Sprite[] bookshelfSprites;
 
+    [Header("Tutorial")]
+    public TutorialManager tutorialManager;
+
     [Header("Audio")]
     public AudioSource musicSource;      // For background music
     public AudioSource sfxSource;        // For sound effects
@@ -93,6 +96,7 @@ public class FirebaseController : MonoBehaviour
     public AudioClip placeItemSound;     // Place item sound effect
     public AudioClip clickSound;
     public AudioClip inventorySound;
+    public AudioClip levelUpSound;
 
     [Header("Audio Settings UI")]
     public Slider volumeSlider;
@@ -124,6 +128,15 @@ public class FirebaseController : MonoBehaviour
         notificationPanel?.SetActive(false);
 
         firestoreService = new FirestoreService();
+
+        if (tutorialManager == null)
+        {
+            tutorialManager = FindObjectOfType<TutorialManager>();
+            if (tutorialManager == null)
+            {
+                Debug.LogWarning("TutorialManager not found in scene!");
+            }
+        }
 
         loginButton.interactable = false;
         signupButton.interactable = false;
@@ -323,6 +336,13 @@ public class FirebaseController : MonoBehaviour
         DisplayHomeItems();
 
         hasInitialized = true;
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Home", 
+            "Welcome to Your Home!", 
+            "This is your personal space. Tap the Items button to open your inventory and place any furniture you’ve bought. Drag items to arrange and decorate your home.");
+        }
     }
 
     public void OpenProfilePanel()
@@ -342,6 +362,13 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
         UpdateProfileLevelDisplay();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Profile", 
+            "Your Profile", 
+            "View your level, XP progress, and account information here. You can earn a limited amount of XP and Coins each day.");
+        }
     }
 
     public void OpenGoalsPanel()
@@ -367,6 +394,13 @@ public class FirebaseController : MonoBehaviour
             goalsManager.DisplayGoals();
         }
         UpdateDailyLimitUI();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Goals", 
+            "Goals Panel", 
+            "Here you can see and complete your daily goals to earn XP and coins! You can also add your own goals!");
+        }
     }
 
     public void OpenStatsPanel()
@@ -396,6 +430,13 @@ public class FirebaseController : MonoBehaviour
                 sleepStreakText.text = $"Current Streak: {currentPlayer.SleepLogStreak} {dayText}";
             }
         }
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Stats", 
+            "Sleep Statistics", 
+            "Track your sleep patterns here! Log your sleep hours and view your sleep streak. The Sleep Graph shows your hours for each day of the week:\n\n<color=#FF0000>Red</color> means low sleep\n<color=#FFFF00>Yellow</color> means decent sleep\n<color=#00FF00>Green</color> means good sleep");
+        }
     }
 
     public void OpenSettingsPanel()
@@ -414,6 +455,13 @@ public class FirebaseController : MonoBehaviour
         profilePanel.SetActive(false);
         settingsPanel.SetActive(true);
         inventoryPanel.SetActive(false);
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Settings", 
+            "Settings", 
+            "Adjust audio settings and manage your preferences here.");
+        }
     }
 
     public void OpenShopPanel()
@@ -433,6 +481,13 @@ public class FirebaseController : MonoBehaviour
         settingsPanel.SetActive(false);
         inventoryPanel.SetActive(false);
         PopulateShop();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Shop", 
+            "Shop", 
+            "Buy furniture and items for your home here! Each purchase will be added to your inventory. Level up to unlock more items to purchase!");
+        }
     }
 
     // -------------------- Notifications --------------------
@@ -501,6 +556,11 @@ public class FirebaseController : MonoBehaviour
             UpdateProfileLevelDisplay();
             await CheckDailyLoginBonus();
             UpdateDailyLimitUI();
+
+            if (tutorialManager != null)
+            {
+                await tutorialManager.LoadSeenTutorials(currentUserId);
+            }
 
             GoalsManager goalsManager = FindFirstObjectByType<GoalsManager>();
             if (goalsManager != null)
@@ -585,6 +645,12 @@ public class FirebaseController : MonoBehaviour
             profileUserName_Text.text = newPlayer.Name;
             profileUserEmail_Text.text = newPlayer.Email;
             UpdateProfileLevelDisplay();
+
+            if (tutorialManager != null)
+            {
+                await tutorialManager.LoadSeenTutorials(currentUserId);
+            }
+
             OpenHomePanel();
         }
         catch (FirebaseException ex)
@@ -730,6 +796,7 @@ public class FirebaseController : MonoBehaviour
             
             // Show level up notification
             showNotificationMessage("Level Up!", $"You are now Level {currentPlayer.Level}!");
+            PlayLevelUpSound();
             
             // Recalculate XP needed for next level
             xpNeeded = GetXPForNextLevel(currentPlayer.Level);
@@ -810,6 +877,14 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
+        // Check level requirement
+        if (currentPlayer != null && currentPlayer.Level < item.LevelRequirement)
+        {
+            showNotificationMessage("Locked", $"You need to reach Level {item.LevelRequirement} to purchase this item!");
+            return;
+        }
+
+        // Rest of existing BuyShopItem method remains the same...
         // Spend money
         bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
         if (success)
@@ -878,9 +953,20 @@ public class FirebaseController : MonoBehaviour
             // Create shop button for items not yet owned
             GameObject buttonObj = Instantiate(shopButtonPrefab, shopContent);
 
-            // Update the button text to show item name and cost
+            // Check if player meets level requirement
+            bool meetsLevelRequirement = currentPlayer != null && currentPlayer.Level >= item.LevelRequirement;
+
+            // Update the button text to show item name, cost, and level requirement if needed
             TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
-            buttonText.text = $"{item.Name}\n${item.Cost}";
+            if (meetsLevelRequirement)
+            {
+                buttonText.text = $"{item.Name}\n${item.Cost}";
+            }
+            else
+            {
+                buttonText.text = $"{item.Name}\nLevel {item.LevelRequirement}+";
+                buttonText.color = Color.gray; // Make text gray for locked items
+            }
 
             // Set the sprite if available
             Sprite itemSprite = shopDatabase.GetSprite(item.Id);
@@ -904,13 +990,38 @@ public class FirebaseController : MonoBehaviour
                 {
                     spriteImage.sprite = itemSprite;
                     spriteImage.preserveAspect = true; // Maintain aspect ratio
+                    
+                    // Make sprite semi-transparent if locked
+                    if (!meetsLevelRequirement)
+                    {
+                        spriteImage.color = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Gray and semi-transparent
+                    }
+                    else
+                    {
+                        spriteImage.color = Color.white; // Normal color
+                    }
                 }
             }
 
             // Set up the buy button
             Button buyButton = buttonObj.GetComponent<Button>();
             string itemId = item.Id; // Capture for closure
-            buyButton.onClick.AddListener(() => BuyShopItem(itemId));
+            
+            if (meetsLevelRequirement)
+            {
+                // Item is unlocked - allow purchase
+                buyButton.onClick.AddListener(() => BuyShopItem(itemId));
+                buyButton.interactable = true;
+            }
+            else
+            {
+                // Item is locked - show message when clicked
+                buyButton.onClick.AddListener(() => 
+                {
+                    showNotificationMessage("Locked", $"Reach Level {item.LevelRequirement} to unlock this item!");
+                });
+                buyButton.interactable = true; // Keep interactable to show the message
+            }
         }
     }
 
@@ -1321,6 +1432,14 @@ public class FirebaseController : MonoBehaviour
 
             // Play next song
             PlayBackgroundMusic();
+        }
+    }
+
+    private void PlayLevelUpSound()
+    {
+        if (sfxSource != null && levelUpSound != null)
+        {
+            sfxSource.PlayOneShot(levelUpSound);
         }
     }
 
