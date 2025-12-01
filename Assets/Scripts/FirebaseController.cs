@@ -1353,6 +1353,10 @@ public class FirebaseController : MonoBehaviour
         Vector2 position = GetSavedPosition(itemId, itemType);
         draggable.SetPosition(position);
 
+        // Load and apply saved flip state (NEW)
+        bool isFlipped = GetSavedFlipState(itemId);
+        draggable.SetFlipped(isFlipped);
+
         // Restore layer order
         if (currentPlayer.HomeItemLayers != null &&
             currentPlayer.HomeItemLayers.TryGetValue(itemId, out int savedLayer))
@@ -1361,6 +1365,34 @@ public class FirebaseController : MonoBehaviour
         }
 
         spawnedFurniture[itemId] = furnitureObj;
+    }
+
+    public async void SaveFurnitureFlip(string itemId, bool isFlipped)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null) return;
+
+        if (player.HomeItemFlipped == null)
+            player.HomeItemFlipped = new Dictionary<string, bool>();
+
+        player.HomeItemFlipped[itemId] = isFlipped;
+
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+
+        Debug.Log($"Saved flip state for {itemId}: {isFlipped}");
+    }
+
+    private bool GetSavedFlipState(string itemId)
+    {
+        if (currentPlayer.HomeItemFlipped != null &&
+            currentPlayer.HomeItemFlipped.TryGetValue(itemId, out bool flipped))
+        {
+            return flipped;
+        }
+
+        return false; // Default to not flipped
     }
 
     // Helper to get saved position

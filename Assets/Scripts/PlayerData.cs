@@ -14,6 +14,7 @@ public class PlayerData
     [FirestoreProperty] public List<string> CompletedGoals { get; set; } = new List<string>();
     [FirestoreProperty] public Dictionary<string, Vector2Data> HomeItemPositions { get; set; } = new Dictionary<string, Vector2Data>();
     [FirestoreProperty] public Dictionary<string, int> HomeItemLayers { get; set; }
+    [FirestoreProperty] public Dictionary<string, bool> HomeItemFlipped { get; set; } = new Dictionary<string, bool>(); // NEW: Store flip state
     [FirestoreProperty] public List<SleepLog> SleepLogs { get; set; } = new List<SleepLog>();
     [FirestoreProperty] public List<CustomGoal> CustomGoals { get; set; }
     [FirestoreProperty] public int SleepLogStreak { get; set; } = 0;
@@ -26,13 +27,12 @@ public class PlayerData
     [FirestoreProperty] public int DailyGoalMoney { get; set; } = 0;
     [FirestoreProperty] public string LastGoalRewardDate { get; set; } = "";
     [FirestoreProperty] public List<string> SeenTutorials { get; set; } = new List<string>();
-
 }
 
 [FirestoreData]
 [Serializable]
 public class SleepLog
 {
-    [FirestoreProperty] public string Date { get; set; }   // Format "2025-10-01"
-    [FirestoreProperty] public float Hours { get; set; }  // Hours slept
+    [FirestoreProperty] public string Date { get; set; }
+    [FirestoreProperty] public float Hours { get; set; }
 }
