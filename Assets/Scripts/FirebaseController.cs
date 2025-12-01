@@ -36,6 +36,7 @@ public class FirebaseController : MonoBehaviour
     private bool isSignIn = false;
     public string currentUserId;
     private bool firebaseReady = false;
+    private const int MAX_HOME_ITEMS = 6;
 
     [Header("Inventory UI")]
     public GameObject inventoryButtonPrefab; // Prefab for each item slot
@@ -635,7 +636,7 @@ public class FirebaseController : MonoBehaviour
                 Email = auth.CurrentUser.Email ?? signupEmail.text,
                 Money = 1000,
                 Inventory = new List<string>(),
-                HomeItems = new Dictionary<string, string>()
+                HomeItems = new List<string>()
             };
 
             await firestoreService.SavePlayerAsync(currentUserId, newPlayer);
@@ -884,7 +885,6 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        // Rest of existing BuyShopItem method remains the same...
         // Spend money
         bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
         if (success)
@@ -940,7 +940,7 @@ public class FirebaseController : MonoBehaviour
                 }
                 
                 // Check home items
-                if (currentPlayer.HomeItems != null && currentPlayer.HomeItems.ContainsValue(item.Id))
+                if (currentPlayer.HomeItems != null && currentPlayer.HomeItems.Contains(item.Id))
                 {
                     alreadyOwned = true;
                 }
@@ -965,17 +965,15 @@ public class FirebaseController : MonoBehaviour
             else
             {
                 buttonText.text = $"{item.Name}\nLevel {item.LevelRequirement}+";
-                buttonText.color = Color.gray; // Make text gray for locked items
+                buttonText.color = Color.gray;
             }
 
             // Set the sprite if available
             Sprite itemSprite = shopDatabase.GetSprite(item.Id);
             if (itemSprite != null)
             {
-                // Find or create an Image component for the sprite
                 UnityEngine.UI.Image spriteImage = null;
                 
-                // Check if there's a child object named "ItemSprite" or "Sprite"
                 Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
                 if (spriteTransform == null)
                     spriteTransform = buttonObj.transform.Find("Sprite");
@@ -985,42 +983,38 @@ public class FirebaseController : MonoBehaviour
                     spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
                 }
                 
-                // If found, set the sprite
                 if (spriteImage != null)
                 {
                     spriteImage.sprite = itemSprite;
-                    spriteImage.preserveAspect = true; // Maintain aspect ratio
+                    spriteImage.preserveAspect = true;
                     
-                    // Make sprite semi-transparent if locked
                     if (!meetsLevelRequirement)
                     {
-                        spriteImage.color = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Gray and semi-transparent
+                        spriteImage.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
                     }
                     else
                     {
-                        spriteImage.color = Color.white; // Normal color
+                        spriteImage.color = Color.white;
                     }
                 }
             }
 
             // Set up the buy button
             Button buyButton = buttonObj.GetComponent<Button>();
-            string itemId = item.Id; // Capture for closure
+            string itemId = item.Id;
             
             if (meetsLevelRequirement)
             {
-                // Item is unlocked - allow purchase
                 buyButton.onClick.AddListener(() => BuyShopItem(itemId));
                 buyButton.interactable = true;
             }
             else
             {
-                // Item is locked - show message when clicked
                 buyButton.onClick.AddListener(() => 
                 {
                     showNotificationMessage("Locked", $"Reach Level {item.LevelRequirement} to unlock this item!");
                 });
-                buyButton.interactable = true; // Keep interactable to show the message
+                buyButton.interactable = true;
             }
         }
     }
@@ -1121,38 +1115,28 @@ public class FirebaseController : MonoBehaviour
         PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
         if (player == null || player.Inventory == null) return;
 
-        // Make sure HomeItems dictionary exists
+        // Make sure HomeItems list exists
         if (player.HomeItems == null)
-            player.HomeItems = new Dictionary<string, string>();
+            player.HomeItems = new List<string>();
 
-        // Get item type from shop
-        ShopItem item = shopDatabase.GetItem(itemId);
-        if (item == null)
+        // Check if home is full
+        if (player.HomeItems.Count >= MAX_HOME_ITEMS)
         {
-            Debug.LogError($"Item not found in ShopDatabase: {itemId}");
-            return;
-        }
-        string itemType = item.Type;
-        Debug.Log($"Placing item {itemId} of type {itemType}");
-
-        // Check if slot is occupied
-        if (player.HomeItems.TryGetValue(itemType, out string existingItemId))
-        {
-            ShowSwapPrompt(itemType, existingItemId, itemId);
+            showNotificationMessage("Home Full", "Your home can only hold 6 items! Remove an item first.");
             return;
         }
 
-        // Slot empty: move item directly
-        await MoveItemToHome(player, itemId, itemType);
+        // Move item directly to home
+        await MoveItemToHome(player, itemId);
     }
 
-    private async Task MoveItemToHome(PlayerData player, string itemId, string itemType)
+    private async Task MoveItemToHome(PlayerData player, string itemId)
     {
         // Remove from inventory
         player.Inventory.Remove(itemId);
 
-        // Place in HomeItems dictionary
-        player.HomeItems[itemType] = itemId;
+        // Add to HomeItems list
+        player.HomeItems.Add(itemId);
 
         // Save player to Firestore
         await firestoreService.SavePlayerAsync(currentUserId, player);
@@ -1160,49 +1144,11 @@ public class FirebaseController : MonoBehaviour
         // Refresh currentPlayer data
         currentPlayer = player;
 
-        // Instantiate prefab in the home
-        ShopItem item = shopDatabase.GetItem(itemId);
-        if (item?.Prefab != null)
-            Instantiate(item.Prefab, item.HomePosition, Quaternion.identity);
-
         // Refresh inventory UI
         ShowInventory();
         DisplayHomeItems();
     }
 
-    
-    private void ShowSwapPrompt(string itemType, string currentHomeItemId, string newItemId)
-    {
-        swapPromptPanel.SetActive(true);
-        swapPromptText.text = $"You already have a {itemType} in your home. Swap it with this one?";
-
-        swapYesButton.onClick.RemoveAllListeners();
-        swapYesButton.onClick.AddListener(async () =>
-        {
-            swapPromptPanel.SetActive(false);
-
-            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
-            if (player == null) return;
-
-            
-            if (!player.Inventory.Contains(currentHomeItemId))
-                player.Inventory.Add(currentHomeItemId);
-
-            // Move new item to home
-            await MoveItemToHome(player, newItemId, itemType);
-
-            // Close inventory after swap
-            inventoryPanel.SetActive(false);
-        });
-
-        // Add the missing No button functionality
-        swapNoButton.onClick.RemoveAllListeners();
-        swapNoButton.onClick.AddListener(() =>
-        {
-            swapPromptPanel.SetActive(false);
-            
-        });
-    }
 
     public async void DisplayHomeItems()
     {
@@ -1230,25 +1176,22 @@ public class FirebaseController : MonoBehaviour
         spawnedFurniture.Clear();
 
         // Create a button AND sprite for each item in home
-        foreach (var kvp in currentPlayer.HomeItems)
+        foreach (string itemId in currentPlayer.HomeItems)
         {
-            string itemType = kvp.Key;
-            string itemId = kvp.Value;
-
             // 1. Create the UI button
             GameObject buttonObj = Instantiate(homeItemButtonPrefab, homeContent);
             ShopItem item = shopDatabase.GetItem(itemId);
             string displayText = item != null ? item.Name : itemId;
             buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
             Button btn = buttonObj.GetComponent<Button>();
-            btn.onClick.AddListener(() => ReturnItemToInventory(itemId, itemType));
+            btn.onClick.AddListener(() => ReturnItemToInventory(itemId));
 
             // 2. Create the draggable sprite
-            SpawnFurnitureSprite(itemId, itemType);
+            SpawnFurnitureSprite(itemId);
         }
     }
 
-    public async void ReturnItemToInventory(string itemId, string itemType)
+    public async void ReturnItemToInventory(string itemId)
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
 
@@ -1256,9 +1199,9 @@ public class FirebaseController : MonoBehaviour
         if (player == null) return;
 
         // Remove from home
-        if (player.HomeItems != null && player.HomeItems.ContainsKey(itemType))
+        if (player.HomeItems != null && player.HomeItems.Contains(itemId))
         {
-            player.HomeItems.Remove(itemType);
+            player.HomeItems.Remove(itemId);
         }
 
         // Add back to inventory
@@ -1307,19 +1250,25 @@ public class FirebaseController : MonoBehaviour
         Debug.Log($"Saved position for {itemId}: {position}");
     }
 
-    private void SpawnFurnitureSprite(string itemId, string itemType)
+    private void SpawnFurnitureSprite(string itemId)
     {
-        GameObject prefab = GetFurniturePrefab(itemType);
+        ShopItem shopItem = shopDatabase.GetItem(itemId);
+        if (shopItem == null)
+        {
+            Debug.LogWarning($"Item not found in ShopDatabase: {itemId}");
+            return;
+        }
+
+        GameObject prefab = GetFurniturePrefab(shopItem.Type);
         if (prefab == null)
         {
-            Debug.LogWarning($"No prefab found for type: {itemType}");
+            Debug.LogWarning($"No prefab found for type: {shopItem.Type}");
             return;
         }
 
         GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
 
         // Apply scale from ShopItem
-        ShopItem shopItem = shopDatabase.GetItem(itemId);
         if (shopItem != null)
         {
             furnitureObj.transform.localScale = Vector3.one * shopItem.Scale;
@@ -1345,15 +1294,15 @@ public class FirebaseController : MonoBehaviour
             draggable = furnitureObj.AddComponent<DraggableFurniture>();
 
         draggable.itemId = itemId;
-        draggable.itemType = itemType;
+        draggable.itemType = shopItem.Type;
         draggable.firebaseController = this;
         draggable.draggableArea = furnitureDisplayArea;
 
         // Load saved position or use default
-        Vector2 position = GetSavedPosition(itemId, itemType);
+        Vector2 position = GetSavedPosition(itemId, shopItem.Type);
         draggable.SetPosition(position);
 
-        // Load and apply saved flip state (NEW)
+        // Load and apply saved flip state
         bool isFlipped = GetSavedFlipState(itemId);
         draggable.SetFlipped(isFlipped);
 
