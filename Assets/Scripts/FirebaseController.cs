@@ -341,7 +341,7 @@ public class FirebaseController : MonoBehaviour
         {
             tutorialManager.ShowTutorial("Home", 
             "Welcome to Your Home!", 
-            "This is your personal space. Tap the Items button to open your inventory and place any furniture you’ve bought. Drag items to arrange and decorate your home.");
+            "This is your personal space. \n•Tap the Items button to open your inventory and place any furniture you’ve bought. \n•Drag items to arrange and decorate your home. \n•Double tap a placed item to flip it horizontally.\n•Tap the item name at the top of your screen to place it back in your inventory.");
         }
     }
 
