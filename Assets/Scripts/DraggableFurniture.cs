@@ -161,7 +161,10 @@ public class DraggableFurniture : MonoBehaviour, IBeginDragHandler, IDragHandler
             case "desk": return new Vector2(-150, -100);
             case "lamp": return new Vector2(150, -100);
             case "bookshelf": return new Vector2(0, -150);
+<<<<<<< HEAD
             case "walldeco": return new Vector2(-50, 150);
+=======
+>>>>>>> 73309d803293356213cb7f2ba93d39dea7a3cd4c
             default: return Vector2.zero;
         }
     }
