@@ -1,0 +1,1939 @@
+using System.Collections;
+using System.Collections.Generic;
+using System;
+using System.Threading.Tasks;
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+using Firebase;
+using Firebase.Auth;
+using Firebase.Extensions;
+using Firebase.Firestore;
+using System.Linq;
+
+public class FirebaseController : MonoBehaviour
+{
+    [Header("Panels")]
+    public GameObject loginPanel, signupPanel, profilePanel, resetPasswordPanel, notificationPanel, tabsPanel, goalsPanel, statsPanel, settingsPanel, homePanel, shopPanel;
+
+    [Header("Inputs")]
+    public TMP_InputField loginEmail, loginPassword, signupEmail, signupPassword, signupCPassword, signupUserName, resetPassEmail;
+
+    [Header("UI Texts")]
+    public TMP_Text notif_Title_Text, notif_Message_Text, profileUserName_Text, profileUserEmail_Text, userMoney, profileLevelText, profileXPText;
+
+    [Header("Daily Limit UI")]
+    public TMP_Text dailyXPText;
+    public TMP_Text dailyMoneyText;
+
+    [Header("Other UI")]
+    public Toggle rememberMe;
+    public Button loginButton, signupButton;
+
+    private FirebaseAuth auth;
+    private FirebaseUser user;
+    public FirestoreService firestoreService;
+    private bool isSignIn = false;
+    public string currentUserId;
+    private bool firebaseReady = false;
+    private const int MAX_HOME_ITEMS = 8;
+
+    [Header("Inventory UI")]
+    public GameObject inventoryButtonPrefab; // Prefab for each item slot
+    public Transform inventoryContent;     // Parent object for inventory buttons
+    public GameObject inventoryPanel;      // Inventory panel
+
+    [Header("Stats - Sleep Log UI")]
+    public TMP_InputField sleepHoursInput;
+    public Button logSleepButton;
+    public Transform sleepLogContent; // parent of the scrollview content
+    public GameObject sleepLogRowPrefab; // prefab row with Date, Hours, Edit button
+    public GameObject editSleepPanel;        // The popup panel
+    public TMP_InputField editHoursInput;    // Input field for hours
+    public Button editOkButton;              // OK button
+    public Button editCancelButton;          // Cancel button
+
+    private SleepLog logBeingEdited;         // Internal reference
+    public TMP_InputField sleepDateInput;
+    public TMP_Text sleepStreakText;
+
+
+    [Header("Swap Prompt UI")]
+    public GameObject swapPromptPanel;       // The panel that pops up
+    public TMPro.TMP_Text swapPromptText;    // Text inside the panel
+    public Button swapYesButton;             // Yes button
+    public Button swapNoButton;              // No button
+
+    [Header("Shop UI")]
+    public GameObject shopButtonPrefab;    // Prefab for each shop item
+    public Transform shopContent;          // Parent object for shop buttons
+
+    [Header("Home Display UI")]
+    public GameObject homeItemButtonPrefab;  // Prefab for home items display
+    public Transform homeContent;           // Parent object for home item buttons
+    public RectTransform furnitureDisplayArea; // The area where furniture sprites will appear
+    public GameObject[] furniturePrefabs;      // Array of your furniture sprite prefabs
+    public GameObject bedPrefab;
+    public GameObject chairPrefab;
+    public GameObject deskPrefab;
+    public GameObject lampPrefab;
+    public GameObject bookshelfPrefab;
+    public GameObject paintingPrefab;
+    public Sprite[] bedSprites;
+    public Sprite[] chairSprites;
+    public Sprite[] deskSprites;
+    public Sprite[] lampSprites;
+    public Sprite[] bookshelfSprites;
+    public Sprite[] paintingSprites;
+
+    [Header("Tutorial")]
+    public TutorialManager tutorialManager;
+
+    [Header("Audio")]
+    public AudioSource musicSource;      // For background music
+    public AudioSource sfxSource;        // For sound effects
+    public AudioClip[] backgroundMusicPlaylist;  // Array of background music clips
+    public AudioClip purchaseSound;      // Purchase sound effect
+    public AudioClip goalCompleteSound;  // Goal completion sound effect
+    public AudioClip pickUpItemSound;    // Pick up item sound effect
+    public AudioClip placeItemSound;     // Place item sound effect
+    public AudioClip clickSound;
+    public AudioClip inventorySound;
+    public AudioClip levelUpSound;
+
+    [Header("Audio Settings UI")]
+    public Slider volumeSlider;
+    public Toggle muteMusicToggle;
+    public Toggle muteSoundToggle;
+    public Button skipSongButton;
+    public Button previousSongButton;
+    public Button pausePlayButton;
+
+    private int currentSongIndex = 0;
+
+    [Header("Sleep Graph UI")]
+    public GameObject sleepGraphPanel;       // The panel that contains the graph
+    public Transform graphContainer;         // Parent container for the bars
+    public GameObject barPrefab;             // Prefab for each bar (Image + Text)
+    public float maxBarHeight = 200f;        // Maximum height of bars in pixels
+    public Button openGraphButton;           // Button to open the graph
+    public Button closeGraphButton;          // Button to close the graph
+
+    // Dictionary to track instantiated furniture GameObjects
+    private Dictionary<string, GameObject> spawnedFurniture = new Dictionary<string, GameObject>();
+
+    private ShopDatabase shopDatabase = new ShopDatabase();
+
+    public PlayerData currentPlayer;
+
+    private async void Start()
+    {
+        notificationPanel?.SetActive(false);
+
+        firestoreService = new FirestoreService();
+
+        if (tutorialManager == null)
+        {
+            tutorialManager = FindObjectOfType<TutorialManager>();
+            if (tutorialManager == null)
+            {
+                Debug.LogWarning("TutorialManager not found in scene!");
+            }
+        }
+
+        loginButton.interactable = false;
+        signupButton.interactable = false;
+
+        var dependencyStatus = await FirebaseApp.CheckAndFixDependenciesAsync();
+        if (dependencyStatus == DependencyStatus.Available)
+        {
+            InitializeFirebase();
+        }
+        else
+        {
+            Debug.LogError($"Could not resolve all Firebase dependencies: {dependencyStatus}");
+        }
+        if (swapPromptPanel != null)
+            swapPromptPanel.SetActive(false);
+
+        if (logSleepButton != null)
+        {
+            logSleepButton.onClick.RemoveAllListeners();
+            logSleepButton.onClick.AddListener(() => LogSleep());
+            Debug.Log("Sleep log button listener added");
+        }
+        else
+        {
+            Debug.LogError("logSleepButton is not assigned in the Inspector!");
+        }
+        
+        // ------------------------- Hide Panels -------------------------------
+
+        if (editSleepPanel != null)
+            editSleepPanel.SetActive(false);
+
+        if (sleepGraphPanel != null)
+            sleepGraphPanel.SetActive(false);
+
+        if (openGraphButton != null)
+            openGraphButton.onClick.AddListener(OpenSleepGraph);
+
+        if (closeGraphButton != null)
+            closeGraphButton.onClick.AddListener(CloseSleepGraph);
+
+        InitializeFurnitureSprites();
+
+        LoadAudioSettings();
+
+        PlayBackgroundMusic();
+
+        if (skipSongButton != null)
+            skipSongButton.onClick.AddListener(SkipToNextSong);
+        if (previousSongButton != null)
+            previousSongButton.onClick.AddListener(SkipToPreviousSong);
+        if (pausePlayButton != null)
+        pausePlayButton.onClick.AddListener(TogglePausePlay);
+
+        OpenLoginPanel();
+
+        CheckRememberedLogin();
+    }
+
+    void InitializeFirebase()
+    {
+        auth = FirebaseAuth.DefaultInstance;
+        auth.StateChanged += AuthStateChanged;
+        AuthStateChanged(this, null);
+
+        firebaseReady = true;
+        loginButton.interactable = true;
+        signupButton.interactable = true;
+    }
+
+    void InitializeFurnitureSprites()
+    {
+        if (shopDatabase == null) return;
+
+        // Map sprites to item IDs
+        for (int i = 0; i < bedSprites.Length && i < 10; i++)
+        {
+            if (bedSprites[i] != null)
+                shopDatabase.SetSprite($"bed{i + 1}", bedSprites[i]);
+        }
+
+        for (int i = 0; i < chairSprites.Length && i < 10; i++)
+        {
+            if (chairSprites[i] != null)
+                shopDatabase.SetSprite($"chair{i + 1}", chairSprites[i]);
+        }
+
+        for (int i = 0; i < deskSprites.Length && i < 10; i++)
+        {
+            if (deskSprites[i] != null)
+                shopDatabase.SetSprite($"desk{i + 1}", deskSprites[i]);
+        }
+
+        for (int i = 0; i < lampSprites.Length && i < 10; i++)
+        {
+            if (lampSprites[i] != null)
+                shopDatabase.SetSprite($"lamp{i + 1}", lampSprites[i]);
+        }
+
+        for (int i = 0; i < bookshelfSprites.Length && i < 10; i++)
+        {
+            if (bookshelfSprites[i] != null)
+                shopDatabase.SetSprite($"bookshelf{i + 1}", bookshelfSprites[i]);
+        }
+
+        for (int i = 0; i < paintingSprites.Length && i < 10; i++)
+        {
+            if (paintingSprites[i] != null)
+                shopDatabase.SetSprite($"walldeco{i + 1}", paintingSprites[i]);
+        }
+    }
+
+    public void SetPlayerData(PlayerData player)
+    {
+        currentPlayer = player;
+    }
+
+    private void CheckRememberedLogin()
+    {
+        if (PlayerPrefs.GetInt("RememberMe", 0) == 1)
+        {
+            string savedEmail = PlayerPrefs.GetString("SavedEmail", "");
+            string savedPassword = PlayerPrefs.GetString("SavedPassword", "");
+
+            if (!string.IsNullOrEmpty(savedEmail) && !string.IsNullOrEmpty(savedPassword))
+            {
+                loginEmail.text = savedEmail;
+                loginPassword.text = savedPassword;
+                rememberMe.isOn = true;
+
+                // Auto-login
+                LoginUser();
+            }
+        }
+    }
+
+    // -------------------- Panels --------------------
+    private bool hasInitialized = false;
+    private string currentPanel = "";
+
+    public void OpenLoginPanel()
+    {
+        hasInitialized = false;
+
+        currentPanel = "Login";
+
+        loginPanel.SetActive(true);
+        signupPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        homePanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+        shopPanel.SetActive(false);
+    }
+
+    public void OpenSignUpPanel()
+    {
+        currentPanel = "SignUp";
+
+        loginPanel.SetActive(false);
+        signupPanel.SetActive(true);
+        profilePanel.SetActive(false);
+        resetPasswordPanel.SetActive(false);
+    }
+
+    public void OpenResetPassPanel()
+    {
+        loginPanel.SetActive(false);
+        signupPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        resetPasswordPanel.SetActive(true);
+    }
+
+    public async void OpenHomePanel()
+    {
+
+        if (currentPanel == "Home") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Home";
+
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
+        loginPanel.SetActive(false);
+        signupPanel.SetActive(false);
+        resetPasswordPanel.SetActive(false);
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(true);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+
+        if (!string.IsNullOrEmpty(currentUserId))
+        {
+            currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+        }
+        DisplayHomeItems();
+
+        hasInitialized = true;
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Home", 
+            "Welcome to Your Home!", 
+            "This is your personal space. \n•Tap the Items button to open your inventory and place any furniture you’ve bought. \n•Drag items to arrange and decorate your home. \n•Double tap a placed item to flip it horizontally.\n•Tap the item name at the top of your screen to place it back in your inventory.");
+        }
+    }
+
+    public void OpenProfilePanel()
+    {
+        if (currentPanel == "Profile") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Profile";
+
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(true);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+        UpdateProfileLevelDisplay();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Profile", 
+            "Your Profile", 
+            "View your level, XP progress, and account information here. You can earn a limited amount of XP and Coins each day.");
+        }
+    }
+
+    public void OpenGoalsPanel()
+    {
+        if (currentPanel == "Goals") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Goals";
+
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(true);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+
+        // Find GoalsManager and display goals
+        GoalsManager goalsManager = FindFirstObjectByType<GoalsManager>();
+        if (goalsManager != null)
+        {
+            goalsManager.CheckAndResetDailyGoals();
+            goalsManager.DisplayGoals();
+        }
+        UpdateDailyLimitUI();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Goals", 
+            "Goals Panel", 
+            "Here you can see and complete your daily goals to earn XP and coins! You can also add your own goals!");
+        }
+    }
+
+    public void OpenStatsPanel()
+    {
+        if (currentPanel == "Stats") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Stats";
+
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(true);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+        if (currentPlayer != null)
+        {
+            RecalculateSleepStreak();
+            DisplaySleepLogs();
+
+            if (sleepStreakText != null)
+            {
+                string dayText = currentPlayer.SleepLogStreak == 1 ? "day" : "days";
+                sleepStreakText.text = $"Current Streak: {currentPlayer.SleepLogStreak} {dayText}";
+            }
+        }
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Stats", 
+            "Sleep Statistics", 
+            "Track your sleep patterns here! Log your sleep hours and view your sleep streak. The Sleep Graph shows your hours for each day of the week:\n\n<color=#FF0000>Red</color> means low sleep\n<color=#FFFF00>Yellow</color> means decent sleep\n<color=#00FF00>Green</color> means good sleep");
+        }
+    }
+
+    public void OpenSettingsPanel()
+    {
+        if (currentPanel == "Settings") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Settings";
+
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(false);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(true);
+        inventoryPanel.SetActive(false);
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Settings", 
+            "Settings", 
+            "Adjust audio settings and manage your preferences here.");
+        }
+    }
+
+    public void OpenShopPanel()
+    {
+        if (currentPanel == "Shop") return;
+        if (hasInitialized) PlayClickSound();
+        currentPanel = "Shop";
+
+        FindObjectOfType<GoalsManager>()?.CloseCompletedGoalsPanelIfOpen();
+
+        tabsPanel.SetActive(true);
+        homePanel.SetActive(false);
+        goalsPanel.SetActive(false);
+        statsPanel.SetActive(false);
+        shopPanel.SetActive(true);
+        profilePanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        inventoryPanel.SetActive(false);
+        PopulateShop();
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.ShowTutorial("Shop", 
+            "Shop", 
+            "Buy furniture and items for your home here! Each purchase will be added to your inventory. Level up to unlock more items to purchase!");
+        }
+    }
+
+    // -------------------- Notifications --------------------
+    public void showNotificationMessage(string title, string message)
+    {
+        notif_Title_Text.text = title;
+        notif_Message_Text.text = message;
+        notificationPanel.SetActive(true);
+    }
+
+    public void CloseNotif_Panel()
+    {
+        PlayClickSound();
+        notif_Title_Text.text = "";
+        notif_Message_Text.text = "";
+        notificationPanel.SetActive(false);
+    }
+
+    // -------------------- Auth --------------------
+    public async void LoginUser()
+    {
+        if (!firebaseReady || auth == null)
+        {
+            showNotificationMessage("Error", "Firebase not ready yet.");
+            return;
+        }
+        if (string.IsNullOrEmpty(loginEmail.text) || string.IsNullOrEmpty(loginPassword.text))
+        {
+            showNotificationMessage("Error", "One or more Fields Empty");
+            return;
+        }
+        try
+        {
+            await auth.SignInWithEmailAndPasswordAsync(loginEmail.text, loginPassword.text);
+            if (auth.CurrentUser == null)
+            {
+                showNotificationMessage("Error", "Login failed. Try again.");
+                return;
+            }
+            currentUserId = auth.CurrentUser.UserId;
+            // Load or create player data
+            PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+            if (player == null)
+            {
+                player = new PlayerData
+                {
+                    Name = auth.CurrentUser.DisplayName ?? loginEmail.text,
+                    Email = auth.CurrentUser.Email ?? loginEmail.text,
+                    Money = 1000
+                };
+                await firestoreService.SavePlayerAsync(currentUserId, player);
+            }
+
+            if (player.SleepLogs != null && player.SleepLogs.Count > 0)
+            {
+                RecalculateSleepStreak();
+                // Save the recalculated streak
+                await firestoreService.SavePlayerAsync(currentUserId, player);
+            }
+            
+            SetPlayerData(player);
+            // Update UI
+            userMoney.text = player.Money.ToString();
+            profileUserName_Text.text = player.Name;
+            profileUserEmail_Text.text = player.Email;
+            UpdateProfileLevelDisplay();
+            await CheckDailyLoginBonus();
+            UpdateDailyLimitUI();
+
+            if (tutorialManager != null)
+            {
+                await tutorialManager.LoadSeenTutorials(currentUserId);
+            }
+
+            GoalsManager goalsManager = FindFirstObjectByType<GoalsManager>();
+            if (goalsManager != null)
+            {
+                goalsManager.CheckAndResetDailyGoals(); // Trigger the reset check
+            }
+
+            OpenHomePanel();
+            DisplaySleepLogs();
+            
+            // Save credentials if Remember Me is checked
+            if (rememberMe.isOn)
+            {
+                PlayerPrefs.SetInt("RememberMe", 1);
+                PlayerPrefs.SetString("SavedEmail", loginEmail.text);
+                PlayerPrefs.SetString("SavedPassword", loginPassword.text);
+                PlayerPrefs.Save();
+            }
+            else
+            {
+                PlayerPrefs.SetInt("RememberMe", 0);
+                PlayerPrefs.DeleteKey("SavedEmail");
+                PlayerPrefs.DeleteKey("SavedPassword");
+                PlayerPrefs.Save();
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Login error: " + ex);
+            showNotificationMessage("Error", "Login failed");
+        }
+    }
+
+    public async void SignUpUser()
+    {
+        if (!firebaseReady || auth == null)
+        {
+            showNotificationMessage("Error", "Firebase not ready yet.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(signupEmail.text) || string.IsNullOrEmpty(signupPassword.text) ||
+            string.IsNullOrEmpty(signupCPassword.text) || string.IsNullOrEmpty(signupUserName.text))
+        {
+            showNotificationMessage("Error", "One or more Fields Empty");
+            return;
+        }
+
+        if (signupPassword.text != signupCPassword.text)
+        {
+            showNotificationMessage("Error", "Passwords do not match");
+            return;
+        }
+
+        try
+        {
+            await auth.CreateUserWithEmailAndPasswordAsync(signupEmail.text, signupPassword.text);
+
+            if (auth.CurrentUser == null)
+            {
+                showNotificationMessage("Error", "Signup failed. Try again.");
+                return;
+            }
+
+            await UpdateUserProfileAsync(signupUserName.text);
+
+            currentUserId = auth.CurrentUser.UserId;
+
+            PlayerData newPlayer = new PlayerData
+            {
+                Name = auth.CurrentUser.DisplayName ?? signupUserName.text,
+                Email = auth.CurrentUser.Email ?? signupEmail.text,
+                Money = 1000,
+                Inventory = new List<string>(),
+                HomeItems = new List<string>()
+            };
+
+            await firestoreService.SavePlayerAsync(currentUserId, newPlayer);
+
+            // Update UI
+            userMoney.text = newPlayer.Money.ToString();
+            profileUserName_Text.text = newPlayer.Name;
+            profileUserEmail_Text.text = newPlayer.Email;
+            UpdateProfileLevelDisplay();
+
+            if (tutorialManager != null)
+            {
+                await tutorialManager.LoadSeenTutorials(currentUserId);
+            }
+
+            OpenHomePanel();
+        }
+        catch (FirebaseException ex)
+        {
+            Debug.LogError($"Signup error: {ex.Message}, ErrorCode: {ex.ErrorCode}");
+            
+            // Check the ErrorCode property
+            AuthError errorCode = (AuthError)ex.ErrorCode;
+            
+            switch (errorCode)
+            {
+                case AuthError.EmailAlreadyInUse:
+                    showNotificationMessage("Error", "This email is already registered. Please use a different email or login.");
+                    break;
+                case AuthError.WeakPassword:
+                    showNotificationMessage("Error", "Password is too weak. Please use a stronger password.");
+                    break;
+                case AuthError.InvalidEmail:
+                    showNotificationMessage("Error", "Invalid email address format.");
+                    break;
+                case AuthError.MissingEmail:
+                    showNotificationMessage("Error", "Please enter an email address.");
+                    break;
+                case AuthError.MissingPassword:
+                    showNotificationMessage("Error", "Please enter a password.");
+                    break;
+                default:
+                    showNotificationMessage("Error", "Signup failed. Please try again.");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Signup error: " + ex);
+            showNotificationMessage("Error", "Signup failed");
+        }
+    }
+
+    public async void ResetPassword()
+    {
+        if (string.IsNullOrEmpty(resetPassEmail.text))
+        {
+            showNotificationMessage("Error", "Email Empty");
+            return;
+        }
+
+        try
+        {
+            await auth.SendPasswordResetEmailAsync(resetPassEmail.text);
+            showNotificationMessage("Alert", "Reset Password Email Sent");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Reset password error: " + ex);
+            showNotificationMessage("Error", "Failed to send reset email");
+        }
+    }
+
+    async Task UpdateUserProfileAsync(string username)
+    {
+        if (auth.CurrentUser == null) return;
+
+        UserProfile profile = new UserProfile { DisplayName = username };
+        try
+        {
+            await auth.CurrentUser.UpdateUserProfileAsync(profile);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Update profile error: " + ex);
+        }
+    }
+
+    void AuthStateChanged(object sender, EventArgs eventArgs)
+    {
+        if (auth.CurrentUser != user)
+        {
+            bool signedIn = user != auth.CurrentUser && auth.CurrentUser != null && auth.CurrentUser.IsValid();
+            if (!signedIn && user != null)
+            {
+                Debug.Log("Signed out " + user.UserId);
+            }
+            user = auth.CurrentUser;
+            isSignIn = signedIn;
+        }
+    }
+
+    void OnDestroy()
+    {
+        if (auth != null)
+            auth.StateChanged -= AuthStateChanged;
+    }
+
+    public void LogOut()
+    {
+        auth.SignOut();
+        profileUserEmail_Text.text = "";
+        profileUserName_Text.text = "";
+        
+        PlayerPrefs.SetInt("RememberMe", 0);
+        PlayerPrefs.DeleteKey("SavedEmail");
+        PlayerPrefs.DeleteKey("SavedPassword");
+        PlayerPrefs.Save();
+        
+        OpenLoginPanel();
+    }
+
+    // ------------------------- Player XP -----------------------------------------
+    public int GetXPForNextLevel(int currentLevel)
+    {
+        // Each level requires 100 * level XP
+        // Level 1->2 needs 100 XP, Level 2->3 needs 200 XP, etc.
+        return 100 * currentLevel;
+    }
+
+    public void UpdateProfileLevelDisplay()
+    {
+        if (currentPlayer != null)
+        {
+            if (profileLevelText != null)
+                profileLevelText.text = $"Level {currentPlayer.Level}";
+            
+            if (profileXPText != null)
+            {
+                int xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+                profileXPText.text = $"XP: {currentPlayer.XP} / {xpNeeded}";
+            }
+        }
+    }
+
+    public async void AddXP(int amount)
+    {
+        if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
+
+        currentPlayer.XP += amount;
+        
+        // Check for level up
+        int xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+        while (currentPlayer.XP >= xpNeeded)
+        {
+            currentPlayer.XP -= xpNeeded;
+            currentPlayer.Level++;
+            
+            // Show level up notification
+            showNotificationMessage("Level Up!", $"You are now Level {currentPlayer.Level}!");
+            PlayLevelUpSound();
+            
+            // Recalculate XP needed for next level
+            xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+        }
+        
+        // Save to database
+        await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+        
+        // Update UI
+        UpdateProfileLevelDisplay();
+    }
+
+    public async Task CheckDailyLoginBonus()
+    {
+        if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
+        
+        string today = System.DateTime.Today.ToString("yyyy-MM-dd");
+        
+        // Check if player already got login bonus today
+        if (currentPlayer.LastLoginDate != today)
+        {
+            // Give daily login bonus (10 XP)
+            currentPlayer.XP += 10;
+            
+            // Check for level up
+            int xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+            while (currentPlayer.XP >= xpNeeded)
+            {
+                currentPlayer.XP -= xpNeeded;
+                currentPlayer.Level++;
+                
+                showNotificationMessage("Level Up!", $"You are now Level {currentPlayer.Level}!");
+                
+                xpNeeded = GetXPForNextLevel(currentPlayer.Level);
+            }
+            
+            // Update last login date
+            currentPlayer.LastLoginDate = today;
+            
+            // Save to Firebase
+            await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+            
+            // Update UI
+            UpdateProfileLevelDisplay();
+            
+            showNotificationMessage("Daily Bonus", "+10 XP for logging in today!");
+        }
+    }
+
+    public void UpdateDailyLimitUI()
+    {
+        if (currentPlayer == null) return;
+
+        int xpCap = 150;
+        int moneyCap = 200;
+
+        if (dailyXPText != null)
+            dailyXPText.text = $"Daily XP Gained: {currentPlayer.DailyGoalXP} / {xpCap}";
+
+        if (dailyMoneyText != null)
+            dailyMoneyText.text = $"Daily Coins Gained: {currentPlayer.DailyGoalMoney} / {moneyCap}";
+    }
+
+
+    // -----------------SHOP-------------------------------------------------
+    public async void BuyShopItem(string itemId)
+    {
+        if (string.IsNullOrEmpty(currentUserId))
+        {
+            Debug.LogWarning("No user logged in.");
+            return;
+        }
+
+        ShopItem item = shopDatabase.GetItem(itemId);
+        if (item == null)
+        {
+            Debug.LogError($"Shop item not found: {itemId}");
+            return;
+        }
+
+        // Check level requirement
+        if (currentPlayer != null && currentPlayer.Level < item.LevelRequirement)
+        {
+            showNotificationMessage("Locked", $"You need to reach Level {item.LevelRequirement} to purchase this item!");
+            return;
+        }
+
+        // Spend money
+        bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
+        if (success)
+        {
+            // Play purchase sound
+            PlayPurchaseSound();
+
+            await firestoreService.AddItemToInventoryAsync(currentUserId, item.Id);
+
+            // Refresh local player data immediately
+            currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+
+            // Update UI
+            if (currentPlayer != null)
+            {
+                userMoney.text = currentPlayer.Money.ToString();
+            }
+
+            showNotificationMessage("Success", $"{item.Name} purchased!");
+
+            // Refresh shop to remove purchased item
+            if (shopPanel.activeSelf)
+                PopulateShop();
+        }
+        else
+        {
+            showNotificationMessage("Error", "Not enough money!");
+        }
+    }
+
+    public void PopulateShop()
+    {
+        if (shopDatabase == null) return;
+
+        // Clear existing buttons
+        foreach (Transform child in shopContent)
+            Destroy(child.gameObject);
+
+        // Get all shop items from your database
+        foreach (var kvp in shopDatabase.Items)
+        {
+            ShopItem item = kvp.Value;
+
+            // Check if player already owns this item (in inventory or home)
+            bool alreadyOwned = false;
+            
+            if (currentPlayer != null)
+            {
+                // Check inventory
+                if (currentPlayer.Inventory != null && currentPlayer.Inventory.Contains(item.Id))
+                {
+                    alreadyOwned = true;
+                }
+                
+                // Check home items
+                if (currentPlayer.HomeItems != null && currentPlayer.HomeItems.Contains(item.Id))
+                {
+                    alreadyOwned = true;
+                }
+            }
+
+            // Skip this item if already owned
+            if (alreadyOwned)
+                continue;
+
+            // Create shop button for items not yet owned
+            GameObject buttonObj = Instantiate(shopButtonPrefab, shopContent);
+
+            // Check if player meets level requirement
+            bool meetsLevelRequirement = currentPlayer != null && currentPlayer.Level >= item.LevelRequirement;
+
+            // Update the button text to show item name, cost, and level requirement if needed
+            TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
+            if (meetsLevelRequirement)
+            {
+                buttonText.text = $"{item.Name}\n${item.Cost}";
+            }
+            else
+            {
+                buttonText.text = $"{item.Name}\nLevel {item.LevelRequirement}+";
+                buttonText.color = Color.gray;
+            }
+
+            // Set the sprite if available
+            Sprite itemSprite = shopDatabase.GetSprite(item.Id);
+            if (itemSprite != null)
+            {
+                UnityEngine.UI.Image spriteImage = null;
+                
+                Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
+                if (spriteTransform == null)
+                    spriteTransform = buttonObj.transform.Find("Sprite");
+                
+                if (spriteTransform != null)
+                {
+                    spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
+                }
+                
+                if (spriteImage != null)
+                {
+                    spriteImage.sprite = itemSprite;
+                    spriteImage.preserveAspect = true;
+                    
+                    if (!meetsLevelRequirement)
+                    {
+                        spriteImage.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+                    }
+                    else
+                    {
+                        spriteImage.color = Color.white;
+                    }
+                }
+            }
+
+            // Set up the buy button
+            Button buyButton = buttonObj.GetComponent<Button>();
+            string itemId = item.Id;
+            
+            if (meetsLevelRequirement)
+            {
+                buyButton.onClick.AddListener(() => BuyShopItem(itemId));
+                buyButton.interactable = true;
+            }
+            else
+            {
+                buyButton.onClick.AddListener(() => 
+                {
+                    showNotificationMessage("Locked", $"Reach Level {item.LevelRequirement} to unlock this item!");
+                });
+                buyButton.interactable = true;
+            }
+        }
+    }
+
+
+    // --------------- Inventory -----------------------------------
+    public void ShowInventory()
+    {
+        if (currentPlayer == null || currentPlayer.Inventory == null)
+        {
+            Debug.Log("No inventory to display.");
+            inventoryPanel.SetActive(true); // show empty panel
+            return;
+        }
+        PlayInventorySound();
+
+        inventoryPanel.SetActive(true);
+
+        // Clear old buttons so we don't duplicate
+        foreach (Transform child in inventoryContent)
+            Destroy(child.gameObject);
+
+        // Spawn one button per item in inventory
+        foreach (string itemId in currentPlayer.Inventory)
+        {
+            GameObject buttonObj = Instantiate(inventoryButtonPrefab, inventoryContent);
+
+            ShopItem item = shopDatabase.GetItem(itemId);
+            string displayText = item != null ? item.Name : itemId;
+            
+            // Set the text
+            TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
+            buttonText.text = displayText;
+
+            // Set the sprite if available
+            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            if (itemSprite != null)
+            {
+                // Find or create an Image component for the sprite
+                UnityEngine.UI.Image spriteImage = null;
+                
+                // Check if there's a child object named "ItemSprite" or "Sprite"
+                Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
+                if (spriteTransform == null)
+                    spriteTransform = buttonObj.transform.Find("Sprite");
+                
+                if (spriteTransform != null)
+                {
+                    spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
+                }
+                
+                // If found, set the sprite
+                if (spriteImage != null)
+                {
+                    spriteImage.sprite = itemSprite;
+                    spriteImage.preserveAspect = true; // Maintain aspect ratio
+                }
+            }
+
+            Button btn = buttonObj.GetComponent<Button>();
+
+            // Fire-and-forget async wrapper for the button click
+            btn.onClick.AddListener(() =>
+            {
+                _ = OnInventoryItemClickedAsync(itemId);
+            });
+        }
+    }
+
+    // Async wrapper for placing item in home and closing inventory
+    private async Task OnInventoryItemClickedAsync(string itemId)
+    {
+        Debug.Log($"Clicked {itemId}");
+
+        await PlaceItemInHome(itemId); // your existing async placement logic
+
+        CloseInventory(); // close the inventory UI after placing
+    }
+
+
+
+    public void CloseInventory()
+    {
+        PlayClickSound();
+        inventoryPanel.SetActive(false);
+
+        foreach (Transform child in inventoryContent)
+        {
+            Destroy(child.gameObject);
+        }
+    }
+
+    // ----------------- Home Items ----------------------------
+    public async Task PlaceItemInHome(string itemId)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null || player.Inventory == null) return;
+
+        // Make sure HomeItems list exists
+        if (player.HomeItems == null)
+            player.HomeItems = new List<string>();
+
+        // Check if home is full
+        if (player.HomeItems.Count >= MAX_HOME_ITEMS)
+        {
+            showNotificationMessage("Home Full", "Your home can only hold 8 items! Remove an item first.");
+            return;
+        }
+
+        // Move item directly to home
+        await MoveItemToHome(player, itemId);
+    }
+
+    private async Task MoveItemToHome(PlayerData player, string itemId)
+    {
+        // Remove from inventory
+        player.Inventory.Remove(itemId);
+
+        // Add to HomeItems list
+        player.HomeItems.Add(itemId);
+
+        // Save player to Firestore
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+
+        // Refresh currentPlayer data
+        currentPlayer = player;
+
+        // Refresh inventory UI
+        ShowInventory();
+        DisplayHomeItems();
+    }
+
+
+    public async void DisplayHomeItems()
+    {
+        if (currentPlayer == null || currentPlayer.HomeItems == null)
+        {
+            return;
+        }
+
+        // Reload fresh data from Firebase to get latest positions
+        currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+
+        if (currentPlayer == null || currentPlayer.HomeItems == null)
+        {
+            return;
+        }
+
+        // Clear existing home item BUTTONS
+        foreach (Transform child in homeContent)
+            Destroy(child.gameObject);
+
+        // Clear existing SPRITES
+        foreach (var kvp in spawnedFurniture)
+            if (kvp.Value != null)
+                Destroy(kvp.Value);
+        spawnedFurniture.Clear();
+
+        // Create a button AND sprite for each item in home
+        foreach (string itemId in currentPlayer.HomeItems)
+        {
+            // 1. Create the UI button
+            GameObject buttonObj = Instantiate(homeItemButtonPrefab, homeContent);
+            ShopItem item = shopDatabase.GetItem(itemId);
+            string displayText = item != null ? item.Name : itemId;
+            buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
+            Button btn = buttonObj.GetComponent<Button>();
+            btn.onClick.AddListener(() => ReturnItemToInventory(itemId));
+
+            // 2. Create the draggable sprite
+            SpawnFurnitureSprite(itemId);
+        }
+    }
+
+    public async void ReturnItemToInventory(string itemId)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null) return;
+
+        // Remove from home
+        if (player.HomeItems != null && player.HomeItems.Contains(itemId))
+        {
+            player.HomeItems.Remove(itemId);
+        }
+
+        // Add back to inventory
+        if (player.Inventory == null)
+            player.Inventory = new List<string>();
+
+        if (!player.Inventory.Contains(itemId))
+            player.Inventory.Add(itemId);
+
+        // Save to database
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+
+        // Update local reference
+        currentPlayer = player;
+
+        // Refresh displays
+        DisplayHomeItems();
+    }
+
+    public async void SaveFurniturePosition(string itemId, string itemType, Vector2 position)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null) return;
+
+        if (player.HomeItemPositions == null)
+            player.HomeItemPositions = new Dictionary<string, Vector2Data>();
+
+        player.HomeItemPositions[itemId] = new Vector2Data(position.x, position.y);
+
+        // Save layer order
+        if (player.HomeItemLayers == null)
+            player.HomeItemLayers = new Dictionary<string, int>();
+
+        foreach (var kvp in spawnedFurniture)
+        {
+            if (kvp.Value != null)
+            {
+                player.HomeItemLayers[kvp.Key] = kvp.Value.transform.GetSiblingIndex();
+            }
+        }
+
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+
+        Debug.Log($"Saved position for {itemId}: {position}");
+    }
+
+    private void SpawnFurnitureSprite(string itemId)
+    {
+        ShopItem shopItem = shopDatabase.GetItem(itemId);
+        if (shopItem == null)
+        {
+            Debug.LogWarning($"Item not found in ShopDatabase: {itemId}");
+            return;
+        }
+
+        GameObject prefab = GetFurniturePrefab(shopItem.Type);
+        if (prefab == null)
+        {
+            Debug.LogWarning($"No prefab found for type: {shopItem.Type}");
+            return;
+        }
+
+        GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
+
+        // Apply scale from ShopItem
+        if (shopItem != null)
+        {
+            furnitureObj.transform.localScale = Vector3.one * shopItem.Scale;
+        }
+
+        // Set the correct sprite for this specific item variant
+        UnityEngine.UI.Image img = furnitureObj.GetComponent<UnityEngine.UI.Image>();
+        if (img != null)
+        {
+            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            if (itemSprite != null)
+            {
+                img.sprite = itemSprite;
+            }
+            else
+            {
+                Debug.LogWarning($"No sprite found for item: {itemId}");
+            }
+        }
+
+        DraggableFurniture draggable = furnitureObj.GetComponent<DraggableFurniture>();
+        if (draggable == null)
+            draggable = furnitureObj.AddComponent<DraggableFurniture>();
+
+        draggable.itemId = itemId;
+        draggable.itemType = shopItem.Type;
+        draggable.firebaseController = this;
+        draggable.draggableArea = furnitureDisplayArea;
+
+        // Load saved position or use default
+        Vector2 position = GetSavedPosition(itemId, shopItem.Type);
+        draggable.SetPosition(position);
+
+        // Load and apply saved flip state
+        bool isFlipped = GetSavedFlipState(itemId);
+        draggable.SetFlipped(isFlipped);
+
+        // Restore layer order
+        if (currentPlayer.HomeItemLayers != null &&
+            currentPlayer.HomeItemLayers.TryGetValue(itemId, out int savedLayer))
+        {
+            furnitureObj.transform.SetSiblingIndex(savedLayer);
+        }
+
+        spawnedFurniture[itemId] = furnitureObj;
+    }
+
+    public async void SaveFurnitureFlip(string itemId, bool isFlipped)
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+
+        PlayerData player = await firestoreService.LoadPlayerAsync(currentUserId);
+        if (player == null) return;
+
+        if (player.HomeItemFlipped == null)
+            player.HomeItemFlipped = new Dictionary<string, bool>();
+
+        player.HomeItemFlipped[itemId] = isFlipped;
+
+        await firestoreService.SavePlayerAsync(currentUserId, player);
+
+        Debug.Log($"Saved flip state for {itemId}: {isFlipped}");
+    }
+
+    private bool GetSavedFlipState(string itemId)
+    {
+        if (currentPlayer.HomeItemFlipped != null &&
+            currentPlayer.HomeItemFlipped.TryGetValue(itemId, out bool flipped))
+        {
+            return flipped;
+        }
+
+        return false; // Default to not flipped
+    }
+
+    // Helper to get saved position
+    private Vector2 GetSavedPosition(string itemId, string itemType)
+    {
+        if (currentPlayer.HomeItemPositions != null &&
+            currentPlayer.HomeItemPositions.TryGetValue(itemId, out Vector2Data savedPos))
+        {
+            return savedPos.ToVector2();
+        }
+
+        // Return default position based on type
+        switch (itemType.ToLower())
+        {
+            case "bed": return new Vector2(-150, 100);
+            case "chair": return new Vector2(150, 100);
+            case "desk": return new Vector2(-150, -100);
+            case "lamp": return new Vector2(150, -100);
+            case "bookshelf": return new Vector2(0, -150);
+            default: return Vector2.zero;
+        }
+    }
+
+    // Helper to get the right prefab
+    private GameObject GetFurniturePrefab(string itemType)
+    {
+        switch (itemType.ToLower())
+        {
+            case "bed": return bedPrefab;
+            case "chair": return chairPrefab;
+            case "desk": return deskPrefab;
+            case "lamp": return lampPrefab;
+            case "bookshelf": return bookshelfPrefab;
+            case "walldeco": return paintingPrefab;
+            default: return null;
+        }
+    }
+
+    // ------------------------- Sounds ---------------------------------------------
+    private void PlayBackgroundMusic()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.volume = 0.3f; // Adjust volume (0.0 to 1.0)
+            musicSource.Play();
+            
+            // Start coroutine to play next song when current one finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+        }
+    }
+
+    private System.Collections.IEnumerator PlayNextSongWhenFinished()
+    {
+        // Wait until the current song finishes, but also check if it's paused
+        while (musicSource.isPlaying || musicSource.time > 0)
+        {
+            yield return new WaitForSeconds(0.5f); // Check every half second
+            
+            // If the song finished playing (not paused, time is 0, and not playing)
+            if (!musicSource.isPlaying && musicSource.time == 0)
+                break;
+        }
+
+        // Only move to next song if music isn't paused
+        if (!musicSource.isPlaying && musicSource.time == 0)
+        {
+            // Move to next song (loop back to start if at end)
+            currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
+
+            // Play next song
+            PlayBackgroundMusic();
+        }
+    }
+
+    private void PlayLevelUpSound()
+    {
+        if (sfxSource != null && levelUpSound != null)
+        {
+            sfxSource.PlayOneShot(levelUpSound);
+        }
+    }
+
+    private void PlayPurchaseSound()
+    {
+        if (sfxSource != null && purchaseSound != null)
+        {
+            sfxSource.PlayOneShot(purchaseSound);
+        }
+    }
+    
+    private void PlayGoalCompleteSound()
+    {
+        if (sfxSource != null && goalCompleteSound != null)
+        {
+            sfxSource.PlayOneShot(goalCompleteSound);
+        }
+    }
+
+    public void PlayPickUpItemSound()
+    {
+        if (sfxSource != null && pickUpItemSound != null)
+        {
+            sfxSource.PlayOneShot(pickUpItemSound);
+        }
+    }
+
+    public void PlayPlaceItemSound()
+    {
+        if (sfxSource != null && placeItemSound != null)
+        {
+            sfxSource.PlayOneShot(placeItemSound);
+        }
+    }
+
+    public void PlayClickSound()
+    {
+        if (sfxSource != null && clickSound != null)
+        {
+            sfxSource.PlayOneShot(clickSound);
+        }
+    }
+
+    public void PlayInventorySound()
+    {
+        if (sfxSource != null && inventorySound != null)
+        {
+            sfxSource.PlayOneShot(inventorySound);
+        }
+    }
+
+    public void OnVolumeChanged()
+    {
+        if (musicSource != null)
+            musicSource.volume = volumeSlider.value;
+        
+        if (sfxSource != null)
+            sfxSource.volume = volumeSlider.value;
+        
+        // Save setting
+        PlayerPrefs.SetFloat("MasterVolume", volumeSlider.value);
+        PlayerPrefs.Save();
+    }
+
+    public void OnMuteMusicChanged()
+    {
+        if (musicSource != null)
+            musicSource.mute = muteMusicToggle.isOn;
+        
+        // Save setting
+        PlayerPrefs.SetInt("MuteMusic", muteMusicToggle.isOn ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+
+    public void OnMuteSoundChanged()
+    {
+        if (sfxSource != null)
+            sfxSource.mute = muteSoundToggle.isOn;
+        
+        // Save setting
+        PlayerPrefs.SetInt("MuteSound", muteSoundToggle.isOn ? 1 : 0);
+        PlayerPrefs.Save();
+    }
+
+    private void LoadAudioSettings()
+    {
+        // Load volume (default to 0.7 if not set)
+        float savedVolume = PlayerPrefs.GetFloat("MasterVolume", 0.7f);
+        volumeSlider.value = savedVolume;
+
+        // Load mute settings
+        muteMusicToggle.isOn = PlayerPrefs.GetInt("MuteMusic", 0) == 1;
+        muteSoundToggle.isOn = PlayerPrefs.GetInt("MuteSound", 0) == 1;
+
+        // Apply loaded settings
+        OnVolumeChanged();
+        OnMuteMusicChanged();
+        OnMuteSoundChanged();
+    }
+
+    public void SkipToNextSong()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            // Stop current coroutine if it's running
+            StopCoroutine(nameof(PlayNextSongWhenFinished));
+
+            // Move to next song
+            currentSongIndex = (currentSongIndex + 1) % backgroundMusicPlaylist.Length;
+
+            // Play the next song
+            musicSource.Stop();
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.Play();
+
+            // Restart the coroutine for when this song finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+
+            // Optional: Play a click sound for feedback
+            PlayClickSound();
+
+            Debug.Log($"Skipped to song {currentSongIndex + 1} of {backgroundMusicPlaylist.Length}");
+        }
+    }
+
+    public void SkipToPreviousSong()
+    {
+        if (musicSource != null && backgroundMusicPlaylist != null && backgroundMusicPlaylist.Length > 0)
+        {
+            // Stop current coroutine if it's running
+            StopCoroutine(nameof(PlayNextSongWhenFinished));
+
+            // Move to previous song (with wrap-around)
+            currentSongIndex--;
+            if (currentSongIndex < 0)
+                currentSongIndex = backgroundMusicPlaylist.Length - 1;
+
+            // Play the previous song
+            musicSource.Stop();
+            musicSource.clip = backgroundMusicPlaylist[currentSongIndex];
+            musicSource.Play();
+
+            // Restart the coroutine for when this song finishes
+            StartCoroutine(PlayNextSongWhenFinished());
+
+            // Optional: Play a click sound for feedback
+            PlayClickSound();
+
+            Debug.Log($"Went back to song {currentSongIndex + 1} of {backgroundMusicPlaylist.Length}");
+        }
+    }
+
+    public void TogglePausePlay()
+    {
+        if (musicSource != null)
+        {
+            if (musicSource.isPlaying)
+            {
+                musicSource.Pause();
+                Debug.Log("Music paused");
+            }
+            else
+            {
+                // Check if there's a clip loaded
+                if (musicSource.clip != null)
+                {
+                    musicSource.UnPause();
+                    Debug.Log("Music resumed");
+                }
+                else
+                {
+                    // No clip loaded, start playing from beginning
+                    PlayBackgroundMusic();
+                }
+            }
+            
+            PlayClickSound();
+        }
+    }
+
+    // Display current song info
+    public string GetCurrentSongName()
+    {
+        if (backgroundMusicPlaylist != null && currentSongIndex < backgroundMusicPlaylist.Length)
+        {
+            return backgroundMusicPlaylist[currentSongIndex].name;
+        }
+        return "No song playing";
+    }
+
+
+    // ---------------------- Sleep Log -----------------------------------------------
+    public async void LogSleep()
+    {
+        if (currentPlayer == null || string.IsNullOrEmpty(currentUserId)) return;
+
+        if (!float.TryParse(sleepHoursInput.text, out float hours))
+        {
+            showNotificationMessage("Error", "Please enter valid sleep hours.");
+            Debug.LogWarning("Invalid sleep hours input.");
+            return;
+        }
+
+        if (hours < 0 || hours > 24)
+        {
+            showNotificationMessage("Error", "Sleep hours must be between 0 and 24.");
+            return;
+        }
+
+        DateTime selectedDate = DateTime.Today;
+        string dateString = selectedDate.ToString("yyyy-MM-dd");
+
+        SleepLog existing = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == dateString);
+        if (existing != null)
+        {
+            existing.Hours = hours;
+        }
+        else
+        {
+            currentPlayer.SleepLogs.Add(new SleepLog { Date = dateString, Hours = hours });
+            UpdateSleepStreak(dateString);
+        }
+
+        await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+        sleepHoursInput.text = "";
+        showNotificationMessage("Success", $"Logged {hours} hours of sleep for today!");
+        DisplaySleepLogs();
+        
+        // Update streak display
+        if (sleepStreakText != null)
+        {
+            sleepStreakText.text = $"Current Streak: {currentPlayer.SleepLogStreak} days";
+        }
+
+        GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
+        if (goalsManager != null)
+        {
+            goalsManager.DisplayGoals();
+        }
+    }
+
+    private void UpdateSleepStreak(string currentDate)
+    {
+        if (string.IsNullOrEmpty(currentPlayer.LastSleepLogDate))
+        {
+            // First time logging sleep
+            currentPlayer.SleepLogStreak = 1;
+            currentPlayer.LastSleepLogDate = currentDate;
+            return;
+        }
+
+        DateTime lastDate = DateTime.Parse(currentPlayer.LastSleepLogDate);
+        DateTime currentDateTime = DateTime.Parse(currentDate);
+
+        // Check if we already logged sleep today
+        bool alreadyLoggedToday = currentPlayer.SleepLogs.Any(log => log.Date == currentDate && log.Hours > 0);
+
+        if (alreadyLoggedToday && currentDate == currentPlayer.LastSleepLogDate)
+        {
+            // Already logged today, don't change streak
+            return;
+        }
+
+        TimeSpan difference = currentDateTime - lastDate;
+
+        if (difference.Days == 1)
+        {
+            // Consecutive day - increment streak
+            currentPlayer.SleepLogStreak++;
+            Debug.Log($"Streak increased to: {currentPlayer.SleepLogStreak}");
+        }
+        else if (difference.Days == 0)
+        {
+            // Same day - don't change streak
+            // This handles multiple logs on the same day
+        }
+        else
+        {
+            // Streak broken (gap of 2+ days) - reset to 1
+            currentPlayer.SleepLogStreak = 1;
+            Debug.Log($"Streak reset to: {currentPlayer.SleepLogStreak}");
+        }
+
+        currentPlayer.LastSleepLogDate = currentDate;
+        Debug.Log($"Sleep streak updated: {currentPlayer.SleepLogStreak} days, last date: {currentPlayer.LastSleepLogDate}");
+    }
+    
+    public void RecalculateSleepStreak()
+    {
+        if (currentPlayer?.SleepLogs == null || currentPlayer.SleepLogs.Count == 0)
+        {
+            currentPlayer.SleepLogStreak = 0;
+            currentPlayer.LastSleepLogDate = "";
+            return;
+        }
+
+        DateTime today = DateTime.Today;
+        string todayString = today.ToString("yyyy-MM-dd");
+        
+        // Check if today has a log entry
+        bool hasLoggedToday = currentPlayer.SleepLogs.Any(log => log.Date == todayString && log.Hours > 0);
+        
+        if (!hasLoggedToday)
+        {
+            currentPlayer.SleepLogStreak = 0;
+            currentPlayer.LastSleepLogDate = "";
+            return;
+        }
+
+        // Count consecutive days backwards from today
+        int streak = 0;
+        DateTime currentDate = today;
+
+        for (int i = 0; i < 365; i++) // Check up to a year back
+        {
+            string dateString = currentDate.ToString("yyyy-MM-dd");
+            bool hasLog = currentPlayer.SleepLogs.Any(log => log.Date == dateString && log.Hours > 0);
+
+            if (hasLog)
+            {
+                streak++;
+                currentDate = currentDate.AddDays(-1);
+            }
+            else
+            {
+                break; // Streak broken
+            }
+        }
+
+        currentPlayer.SleepLogStreak = streak;
+        currentPlayer.LastSleepLogDate = todayString;
+        
+        Debug.Log($"Recalculated streak: {currentPlayer.SleepLogStreak} days");
+    }
+
+    public void DisplaySleepLogs()
+    {
+        foreach (Transform child in sleepLogContent)
+            Destroy(child.gameObject);
+
+        if (currentPlayer?.SleepLogs == null) return;
+
+        foreach (var log in currentPlayer.SleepLogs.OrderByDescending(l => l.Date))
+        {
+            GameObject rowObj = Instantiate(sleepLogRowPrefab, sleepLogContent);
+            SleepLogRow row = rowObj.GetComponent<SleepLogRow>();
+
+            row.dateText.text = log.Date;
+            row.hoursText.text = $"{log.Hours} Hours";
+            row.editButton.GetComponentInChildren<TMP_Text>().text = "Edit";
+
+            row.editButton.onClick.RemoveAllListeners();
+            row.editButton.onClick.AddListener(() =>
+            {
+                OpenEditSleepPanel(log);
+            });
+        }
+    }
+
+
+    public void OpenEditSleepPanel(SleepLog log)
+    {
+        logBeingEdited = log;
+        editHoursInput.text = log.Hours.ToString();
+        editSleepPanel.SetActive(true);
+
+        editOkButton.onClick.RemoveAllListeners();
+        editOkButton.onClick.AddListener(SaveEditedSleep);
+
+        editCancelButton.onClick.RemoveAllListeners();
+        editCancelButton.onClick.AddListener(() =>
+        {
+            editSleepPanel.SetActive(false);
+            logBeingEdited = null;
+        });
+    }
+
+    public async void SaveEditedSleep()
+    {
+        if (logBeingEdited != null && float.TryParse(editHoursInput.text, out float newHours))
+        {
+            logBeingEdited.Hours = newHours;
+
+            await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+            editSleepPanel.SetActive(false);
+            DisplaySleepLogs();
+        }
+    }
+
+    public void OpenSleepGraph()
+    {
+        PlayClickSound();
+        if (sleepGraphPanel != null)
+        {
+            sleepGraphPanel.SetActive(true);
+            UpdateSleepGraph(); // Update the graph when opening
+        }
+    }
+
+    public void CloseSleepGraph()
+    {
+        PlayClickSound();
+        if (sleepGraphPanel != null)
+        {
+            sleepGraphPanel.SetActive(false);
+        }
+    }
+
+    public void UpdateSleepGraph()
+    {
+        if (graphContainer == null || barPrefab == null) return;
+
+        // Clear existing bars
+        foreach (Transform child in graphContainer)
+            Destroy(child.gameObject);
+
+        if (currentPlayer?.SleepLogs == null || currentPlayer.SleepLogs.Count == 0) return;
+
+        // Get last 7 days of data
+        DateTime today = DateTime.Today;
+        string[] dayNames = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+
+        for (int i = 6; i >= 0; i--)
+        {
+            DateTime date = today.AddDays(-i);
+            string dateString = date.ToString("yyyy-MM-dd");
+            string dayName = dayNames[(int)date.DayOfWeek];
+
+            // Find sleep data for this date
+            SleepLog log = currentPlayer.SleepLogs.FirstOrDefault(l => l.Date == dateString);
+            float hours = log?.Hours ?? 0f;
+
+            // Create bar
+            GameObject barObj = Instantiate(barPrefab, graphContainer);
+            
+            // Set bar height (assuming 8 hours = max height)
+            RectTransform barRect = barObj.transform.Find("Bar")?.GetComponent<RectTransform>();
+            if (barRect != null)
+            {
+                float heightPercent = Mathf.Clamp01(hours / 8f); // 8 hours = 100%
+                barRect.sizeDelta = new Vector2(barRect.sizeDelta.x, maxBarHeight * heightPercent);
+            }
+
+            // Set day label
+            TMP_Text dayLabel = barObj.transform.Find("DayLabel")?.GetComponent<TMP_Text>();
+            if (dayLabel != null)
+                dayLabel.text = dayName;
+
+            // Set hours label
+            TMP_Text hoursLabel = barObj.transform.Find("HoursLabel")?.GetComponent<TMP_Text>();
+            if (hoursLabel != null)
+                hoursLabel.text = hours > 0 ? $"{hours}h" : "";
+
+            // Optional: Color code the bar based on hours
+            UnityEngine.UI.Image barImage = barObj.transform.Find("Bar")?.GetComponent<UnityEngine.UI.Image>();
+            if (barImage != null)
+            {
+                if (hours >= 7 && hours <= 9)
+                    barImage.color = new Color(0.3f, 0.8f, 0.3f); // Green - good sleep
+                else if (hours >= 6 && hours < 7)
+                    barImage.color = new Color(0.9f, 0.8f, 0.2f); // Yellow - okay sleep
+                else if (hours > 0)
+                    barImage.color = new Color(0.9f, 0.3f, 0.3f); // Red - poor sleep
+                else
+                    barImage.color = new Color(0.5f, 0.5f, 0.5f); // Gray - no data
+            }
+        }
+    }
+}
+
+[System.Serializable]
+[Firebase.Firestore.FirestoreData]
+public class Vector2Data
+{
+    [Firebase.Firestore.FirestoreProperty]
+    public float x { get; set; }
+
+    [Firebase.Firestore.FirestoreProperty]
+    public float y { get; set; }
+
+    public Vector2Data() { }
+
+    public Vector2Data(float x, float y)
+    {
+        this.x = x;
+        this.y = y;
+    }
+
+    public Vector2 ToVector2()
+    {
+        return new Vector2(x, y);
+    }
+}
+
+[Serializable]
+[FirestoreData]
+public class CustomGoal
+{
+    [FirestoreProperty] public string Id { get; set; }
+    [FirestoreProperty] public string Name { get; set; }
+    [FirestoreProperty] public int Reward { get; set; }
+    [FirestoreProperty] public bool IsCompleted { get; set; }
+    [FirestoreProperty] public bool IsDaily { get; set; }
+    [FirestoreProperty] public bool IsWeekly { get; set; }
+}
