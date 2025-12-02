@@ -36,7 +36,7 @@ public class FirebaseController : MonoBehaviour
     private bool isSignIn = false;
     public string currentUserId;
     private bool firebaseReady = false;
-    private const int MAX_HOME_ITEMS = 6;
+    private const int MAX_HOME_ITEMS = 8;
 
     [Header("Inventory UI")]
     public GameObject inventoryButtonPrefab; // Prefab for each item slot
@@ -78,11 +78,13 @@ public class FirebaseController : MonoBehaviour
     public GameObject deskPrefab;
     public GameObject lampPrefab;
     public GameObject bookshelfPrefab;
+    public GameObject paintingPrefab;
     public Sprite[] bedSprites;
     public Sprite[] chairSprites;
     public Sprite[] deskSprites;
     public Sprite[] lampSprites;
     public Sprite[] bookshelfSprites;
+    public Sprite[] paintingSprites;
 
     [Header("Tutorial")]
     public TutorialManager tutorialManager;
@@ -241,6 +243,12 @@ public class FirebaseController : MonoBehaviour
         {
             if (bookshelfSprites[i] != null)
                 shopDatabase.SetSprite($"bookshelf{i + 1}", bookshelfSprites[i]);
+        }
+
+        for (int i = 0; i < paintingSprites.Length && i < 10; i++)
+        {
+            if (paintingSprites[i] != null)
+                shopDatabase.SetSprite($"walldeco{i + 1}", paintingSprites[i]);
         }
     }
 
@@ -1122,7 +1130,7 @@ public class FirebaseController : MonoBehaviour
         // Check if home is full
         if (player.HomeItems.Count >= MAX_HOME_ITEMS)
         {
-            showNotificationMessage("Home Full", "Your home can only hold 6 items! Remove an item first.");
+            showNotificationMessage("Home Full", "Your home can only hold 8 items! Remove an item first.");
             return;
         }
 
@@ -1375,6 +1383,7 @@ public class FirebaseController : MonoBehaviour
             case "desk": return deskPrefab;
             case "lamp": return lampPrefab;
             case "bookshelf": return bookshelfPrefab;
+            case "walldeco": return paintingPrefab;
             default: return null;
         }
     }
