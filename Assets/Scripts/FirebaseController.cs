@@ -256,7 +256,123 @@ public class FirebaseController : MonoBehaviour
     {
         currentPlayer = player;
     }
+    [Serializable]
+public class FitbitSleepWeekResponse
+{
+    public string startDate;
+    public string endDate;
+    public FitbitSleepRaw raw;
+}
 
+[Serializable]
+public class FitbitSleepRaw
+{
+    public FitbitSleepLog[] sleep;
+}
+
+[Serializable]
+public class FitbitSleepLog
+{
+    public string dateOfSleep;   // "yyyy-MM-dd"
+    public int minutesAsleep;
+    public bool isMainSleep;
+}
+
+// ... inside FirebaseController class:
+
+public async void SyncFitbitSleepWeek(string fitbitJson)
+{
+    if (currentPlayer == null || string.IsNullOrEmpty(currentUserId))
+    {
+        Debug.LogWarning("SyncFitbitSleepWeek: no current player or user id.");
+        return;
+    }
+
+    if (string.IsNullOrEmpty(fitbitJson))
+    {
+        Debug.LogWarning("SyncFitbitSleepWeek: empty JSON.");
+        return;
+    }
+
+    FitbitSleepWeekResponse resp;
+    try
+    {
+        resp = JsonUtility.FromJson<FitbitSleepWeekResponse>(fitbitJson);
+    }
+    catch (Exception e)
+    {
+        Debug.LogError("Failed to parse Fitbit sleep JSON: " + e);
+        showNotificationMessage("Error", "Could not read Fitbit sleep data.");
+        return;
+    }
+
+    if (resp == null || resp.raw == null || resp.raw.sleep == null || resp.raw.sleep.Length == 0)
+    {
+        Debug.LogWarning("SyncFitbitSleepWeek: no sleep entries in response.");
+        showNotificationMessage("Info", "No Fitbit sleep data found for this period.");
+        return;
+    }
+
+    // Group sleep logs by date and sum minutesAsleep
+    var groupedByDate = resp.raw.sleep
+        .GroupBy(s => s.dateOfSleep)
+        .Select(g => new
+        {
+            Date = g.Key,
+            TotalMinutes = g.Sum(x => x.minutesAsleep)
+        });
+
+    int daysUpdated = 0;
+
+    foreach (var entry in groupedByDate)
+    {
+        string dateString = entry.Date;
+        float hours = entry.TotalMinutes / 60f;
+
+        // Clamp to [0, 24]
+        if (hours < 0f) hours = 0f;
+        if (hours > 24f) hours = 24f;
+
+        SleepLog existing = currentPlayer.SleepLogs
+            .FirstOrDefault(l => l.Date == dateString);
+
+        if (existing != null)
+        {
+            // choose your merge strategy; here we just overwrite with Fitbit value
+            existing.Hours = hours;
+        }
+        else
+        {
+            currentPlayer.SleepLogs.Add(new SleepLog
+            {
+                Date = dateString,
+                Hours = hours
+            });
+
+            // keep your streak logic
+            UpdateSleepStreak(dateString);
+        }
+
+        daysUpdated++;
+    }
+
+    await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+    DisplaySleepLogs();
+
+    if (sleepStreakText != null)
+    {
+        sleepStreakText.text = $"Current Streak: {currentPlayer.SleepLogStreak} days";
+    }
+
+    GoalsManager goalsManager = FindObjectOfType<GoalsManager>();
+    if (goalsManager != null)
+    {
+        goalsManager.DisplayGoals();
+    }
+
+    showNotificationMessage("Success", $"Imported Fitbit sleep for {daysUpdated} day(s)!");
+}
     private void CheckRememberedLogin()
     {
         if (PlayerPrefs.GetInt("RememberMe", 0) == 1)
@@ -2024,6 +2140,7 @@ public class FirebaseController : MonoBehaviour
             }
         }
     }
+    
 }
 
 [System.Serializable]
