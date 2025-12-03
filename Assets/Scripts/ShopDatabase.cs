@@ -60,11 +60,11 @@ public class ShopDatabase
         Items["bookshelf3"] = new ShopItem("bookshelf3", "White Bookshelf", "bookshelf", 700, 1.0f, 7);
 
         // Wall Deco
-        Items["walldeco1"] = new ShopItem("walldeco1", "Corkboard", "walldeco", 100, 2.0f, 1);
+        Items["walldeco1"] = new ShopItem("walldeco1", "Corkboard", "walldeco", 100, 1.5f, 1);
         Items["walldeco2"] = new ShopItem("walldeco2", "Sunset Painting", "walldeco", 200, 2.0f, 2);
         Items["walldeco3"] = new ShopItem("walldeco3", "Sunflowers Painting", "walldeco", 250, 2.0f, 3);
         Items["walldeco4"] = new ShopItem("walldeco4", "Wave Painting", "walldeco", 300, 2.0f, 5);
-        Items["walldeco5"] = new ShopItem("walldeco5", "Ghostly Scream", "walldeco", 400, 2.0f, 6);
+        Items["walldeco5"] = new ShopItem("walldeco5", "Ghostly Scream", "walldeco", 400, 1.5f, 6);
 
 
         // Home positions
