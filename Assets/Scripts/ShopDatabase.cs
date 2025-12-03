@@ -55,9 +55,15 @@ public class ShopDatabase
         Items["lamp9"] = new ShopItem("lamp9", "Fancy Lamp", "lamp", 600, 0.6f, 10);
 
         // Bookshelves
-        Items["bookshelf1"] = new ShopItem("bookshelf1", "Bookshelf", "bookshelf", 400, 1.0f, 3);
-        Items["bookshelf2"] = new ShopItem("bookshelf2", "Light Brown Bookshelf", "bookshelf", 500, 1.0f, 5);
-        Items["bookshelf3"] = new ShopItem("bookshelf3", "White Bookshelf", "bookshelf", 700, 1.0f, 7);
+        Items["bookshelf1"] = new ShopItem("bookshelf1", "Bookshelf", "bookshelf", 300, 1.0f, 1);
+        Items["bookshelf2"] = new ShopItem("bookshelf2", "Light Brown Bookshelf", "bookshelf", 350, 1.0f, 2);
+        Items["bookshelf3"] = new ShopItem("bookshelf3", "Short Dark Brown Bookshelf", "bookshelf", 400, 1.0f, 3);
+        Items["bookshelf4"] = new ShopItem("bookshelf4", "Short Light Brown Bookshelf", "bookshelf", 400, 1.0f, 3);
+        Items["bookshelf5"] = new ShopItem("bookshelf5", "White Bookshelf", "bookshelf", 500, 1.0f, 4);
+        Items["bookshelf6"] = new ShopItem("bookshelf6", "Short White Bookshelf", "bookshelf", 500, 1.0f, 5);
+        Items["bookshelf7"] = new ShopItem("bookshelf7", "Think Dark Bookshelf", "bookshelf", 600, 1.0f, 5);
+        Items["bookshelf8"] = new ShopItem("bookshelf8", "Thin Light Bookshelf", "bookshelf", 650, 1.0f, 6);
+        Items["bookshelf9"] = new ShopItem("bookshelf9", "Thin White Bookshelf", "bookshelf", 700, 1.0f, 7);
 
         // Wall Deco
         Items["walldeco1"] = new ShopItem("walldeco1", "Corkboard", "walldeco", 100, 1.5f, 1);
