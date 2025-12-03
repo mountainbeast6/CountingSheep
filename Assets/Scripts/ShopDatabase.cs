@@ -16,8 +16,8 @@ public class ShopDatabase
         ItemSprites = new Dictionary<string, Sprite>();
 
         // Beds
-        Items["bed1"] = new ShopItem("bed1", "Small Bed", "bed", 200, 1.0f, 1);
-        Items["bed2"] = new ShopItem("bed2", "Yellow Bed", "bed", 200, 1.0f, 2);
+        Items["bed1"] = new ShopItem("bed1", "Small Bed", "bed", 200, 1.5f, 1);
+        Items["bed2"] = new ShopItem("bed2", "Yellow Bed", "bed", 200, 1.15f, 2);
         Items["bed3"] = new ShopItem("bed3", "Blue Bed", "bed", 300, 1.15f, 3);
         Items["bed4"] = new ShopItem("bed4", "Green Bed", "bed", 300, 1.15f, 3);
         Items["bed5"] = new ShopItem("bed5", "Pink Bed", "bed", 400, 1.15f, 5);
@@ -46,13 +46,13 @@ public class ShopDatabase
         // Lamps
         Items["lamp1"] = new ShopItem("lamp1", "Desk Lamp", "lamp", 80, 0.5f, 1);
         Items["lamp2"] = new ShopItem("lamp2", "Floor Lamp", "lamp", 120, 0.6f, 2);
-        Items["lamp3"] = new ShopItem("lamp3", "White Lamp", "lamp", 300, 0.65f, 3);
-        Items["lamp4"] = new ShopItem("lamp4", "Green Lamp", "lamp", 350, 0.65f, 4);
-        Items["lamp5"] = new ShopItem("lamp5", "Red Lamp", "lamp", 400, 0.65f, 4);
-        Items["lamp6"] = new ShopItem("lamp6", "Blue Lamp", "lamp", 400, 0.65f, 6);
+        Items["lamp3"] = new ShopItem("lamp3", "White Lamp", "lamp", 300, 0.5f, 3);
+        Items["lamp4"] = new ShopItem("lamp4", "Green Lamp", "lamp", 350, 0.5f, 4);
+        Items["lamp5"] = new ShopItem("lamp5", "Red Lamp", "lamp", 400, 0.5f, 4);
+        Items["lamp6"] = new ShopItem("lamp6", "Blue Lamp", "lamp", 400, 0.5f, 6);
         Items["lamp7"] = new ShopItem("lamp7", "Orange Lamp", "lamp", 450, 0.65f, 6);
-        Items["lamp8"] = new ShopItem("lamp8", "Pink Lamp", "lamp", 500, 0.7f, 8);
-        Items["lamp9"] = new ShopItem("lamp9", "Fancy Lamp", "lamp", 600, 0.75f, 10);
+        Items["lamp8"] = new ShopItem("lamp8", "Pink Lamp", "lamp", 500, 0.65f, 8);
+        Items["lamp9"] = new ShopItem("lamp9", "Fancy Lamp", "lamp", 600, 0.6f, 10);
 
         // Bookshelves
         Items["bookshelf1"] = new ShopItem("bookshelf1", "Bookshelf", "bookshelf", 400, 1.0f, 3);
@@ -62,9 +62,9 @@ public class ShopDatabase
         // Wall Deco
         Items["walldeco1"] = new ShopItem("walldeco1", "Corkboard", "walldeco", 100, 1.5f, 1);
         Items["walldeco2"] = new ShopItem("walldeco2", "Sunset Painting", "walldeco", 200, 2.0f, 2);
-        Items["walldeco3"] = new ShopItem("walldeco3", "Sunflowers Painting", "walldeco", 250, 2.0f, 3);
-        Items["walldeco4"] = new ShopItem("walldeco4", "Wave Painting", "walldeco", 300, 2.0f, 5);
-        Items["walldeco5"] = new ShopItem("walldeco5", "Ghostly Scream", "walldeco", 400, 1.5f, 6);
+        Items["walldeco3"] = new ShopItem("walldeco3", "Sunflowers Painting", "walldeco", 250, 1.5f, 3);
+        Items["walldeco4"] = new ShopItem("walldeco4", "Wave Painting", "walldeco", 300, 1.5f, 5);
+        Items["walldeco5"] = new ShopItem("walldeco5", "Ghostly Scream", "walldeco", 400, 1.8f, 6);
 
 
         // Home positions
