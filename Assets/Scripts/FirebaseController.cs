@@ -871,8 +871,16 @@ public class FirebaseController : MonoBehaviour
 
 
     // -----------------SHOP-------------------------------------------------
+    private bool isPurchasing = false;
     public async void BuyShopItem(string itemId)
     {
+        // Prevent double-clicking
+        if (isPurchasing)
+        {
+            Debug.Log("Purchase already in progress...");
+            return;
+        }
+
         if (string.IsNullOrEmpty(currentUserId))
         {
             Debug.LogWarning("No user logged in.");
@@ -893,33 +901,54 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        // Spend money
-        bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
-        if (success)
+        isPurchasing = true;
+
+        try
         {
-            // Play purchase sound
-            PlayPurchaseSound();
-
-            await firestoreService.AddItemToInventoryAsync(currentUserId, item.Id);
-
-            // Refresh local player data immediately
-            currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
-
-            // Update UI
-            if (currentPlayer != null)
+            bool success = await firestoreService.SpendMoneyAsync(currentUserId, item.Cost);
+            if (success)
             {
-                userMoney.text = currentPlayer.Money.ToString();
+                PlayPurchaseSound();
+
+                // Generate unique instance ID
+                string instanceId = GenerateUniqueItemId(item.Id);
+                
+                // Add to inventory with instance ID
+                await firestoreService.AddItemToInventoryAsync(currentUserId, instanceId);
+
+                // Refresh player data
+                currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
+                
+                // Initialize mapping if needed
+                if (currentPlayer.ItemInstanceToShopId == null)
+                    currentPlayer.ItemInstanceToShopId = new Dictionary<string, string>();
+                
+                // Map instance ID to shop item ID
+                currentPlayer.ItemInstanceToShopId[instanceId] = item.Id;
+                
+                // Save the mapping
+                await firestoreService.SavePlayerAsync(currentUserId, currentPlayer);
+
+                // Update UI
+                if (currentPlayer != null)
+                {
+                    userMoney.text = currentPlayer.Money.ToString();
+                }
+
+                showNotificationMessage("Success", $"{item.Name} purchased!");
+
+                // Refresh shop to remove purchased item
+                if (shopPanel.activeSelf)
+                    PopulateShop();
             }
-
-            showNotificationMessage("Success", $"{item.Name} purchased!");
-
-            // Refresh shop to remove purchased item
-            if (shopPanel.activeSelf)
-                PopulateShop();
+            else
+            {
+                showNotificationMessage("Error", "Not enough money!");
+            }
         }
-        else
+        finally
         {
-            showNotificationMessage("Error", "Not enough money!");
+            isPurchasing = false;
         }
     }
 
@@ -936,21 +965,47 @@ public class FirebaseController : MonoBehaviour
         {
             ShopItem item = kvp.Value;
 
-            // Check if player already owns this item (in inventory or home)
+            // Check if player already owns this SHOP ITEM (not instance)
             bool alreadyOwned = false;
             
             if (currentPlayer != null)
             {
-                // Check inventory
-                if (currentPlayer.Inventory != null && currentPlayer.Inventory.Contains(item.Id))
+                // Initialize mapping if needed
+                if (currentPlayer.ItemInstanceToShopId == null)
+                    currentPlayer.ItemInstanceToShopId = new Dictionary<string, string>();
+
+                // Check if any instance in inventory maps to this shop item
+                if (currentPlayer.Inventory != null)
                 {
-                    alreadyOwned = true;
+                    foreach (string instanceId in currentPlayer.Inventory)
+                    {
+                        string shopItemId = currentPlayer.ItemInstanceToShopId.ContainsKey(instanceId) 
+                            ? currentPlayer.ItemInstanceToShopId[instanceId] 
+                            : instanceId; // Backward compatibility
+                        
+                        if (shopItemId == item.Id)
+                        {
+                            alreadyOwned = true;
+                            break;
+                        }
+                    }
                 }
                 
-                // Check home items
-                if (currentPlayer.HomeItems != null && currentPlayer.HomeItems.Contains(item.Id))
+                // Check if any instance in home maps to this shop item
+                if (!alreadyOwned && currentPlayer.HomeItems != null)
                 {
-                    alreadyOwned = true;
+                    foreach (string instanceId in currentPlayer.HomeItems)
+                    {
+                        string shopItemId = currentPlayer.ItemInstanceToShopId.ContainsKey(instanceId) 
+                            ? currentPlayer.ItemInstanceToShopId[instanceId] 
+                            : instanceId; // Backward compatibility
+                        
+                        if (shopItemId == item.Id)
+                        {
+                            alreadyOwned = true;
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -1034,37 +1089,44 @@ public class FirebaseController : MonoBehaviour
         if (currentPlayer == null || currentPlayer.Inventory == null)
         {
             Debug.Log("No inventory to display.");
-            inventoryPanel.SetActive(true); // show empty panel
+            inventoryPanel.SetActive(true);
             return;
         }
         PlayInventorySound();
 
         inventoryPanel.SetActive(true);
 
-        // Clear old buttons so we don't duplicate
+        // Clear old buttons
         foreach (Transform child in inventoryContent)
             Destroy(child.gameObject);
 
+        // Initialize the mapping dictionary if it doesn't exist
+        if (currentPlayer.ItemInstanceToShopId == null)
+            currentPlayer.ItemInstanceToShopId = new Dictionary<string, string>();
+
         // Spawn one button per item in inventory
-        foreach (string itemId in currentPlayer.Inventory)
+        foreach (string instanceId in currentPlayer.Inventory)
         {
             GameObject buttonObj = Instantiate(inventoryButtonPrefab, inventoryContent);
 
-            ShopItem item = shopDatabase.GetItem(itemId);
-            string displayText = item != null ? item.Name : itemId;
+            // Get the shop item ID from the mapping, or use the instance ID if no mapping exists (backward compatibility)
+            string shopItemId = currentPlayer.ItemInstanceToShopId.ContainsKey(instanceId) 
+                ? currentPlayer.ItemInstanceToShopId[instanceId] 
+                : instanceId;
+
+            ShopItem item = shopDatabase.GetItem(shopItemId);
+            string displayText = item != null ? item.Name : shopItemId;
             
             // Set the text
             TMPro.TMP_Text buttonText = buttonObj.GetComponentInChildren<TMPro.TMP_Text>();
             buttonText.text = displayText;
 
-            // Set the sprite if available
-            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            // Set the sprite
+            Sprite itemSprite = shopDatabase.GetSprite(shopItemId);
             if (itemSprite != null)
             {
-                // Find or create an Image component for the sprite
                 UnityEngine.UI.Image spriteImage = null;
                 
-                // Check if there's a child object named "ItemSprite" or "Sprite"
                 Transform spriteTransform = buttonObj.transform.Find("ItemSprite");
                 if (spriteTransform == null)
                     spriteTransform = buttonObj.transform.Find("Sprite");
@@ -1074,20 +1136,18 @@ public class FirebaseController : MonoBehaviour
                     spriteImage = spriteTransform.GetComponent<UnityEngine.UI.Image>();
                 }
                 
-                // If found, set the sprite
                 if (spriteImage != null)
                 {
                     spriteImage.sprite = itemSprite;
-                    spriteImage.preserveAspect = true; // Maintain aspect ratio
+                    spriteImage.preserveAspect = true;
                 }
             }
 
             Button btn = buttonObj.GetComponent<Button>();
-
-            // Fire-and-forget async wrapper for the button click
+            string capturedInstanceId = instanceId; // Capture for closure
             btn.onClick.AddListener(() =>
             {
-                _ = OnInventoryItemClickedAsync(itemId);
+                _ = OnInventoryItemClickedAsync(capturedInstanceId);
             });
         }
     }
@@ -1116,6 +1176,10 @@ public class FirebaseController : MonoBehaviour
     }
 
     // ----------------- Home Items ----------------------------
+    private string GenerateUniqueItemId(string shopItemId)
+    {
+        return $"{shopItemId}_{System.Guid.NewGuid().ToString().Substring(0, 8)}";
+    }
     public async Task PlaceItemInHome(string itemId)
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
@@ -1134,19 +1198,49 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
+        // Check if this item exists in inventory (it should be an instance ID at this point)
+        if (!player.Inventory.Contains(itemId))
+        {
+            Debug.LogWarning($"Item {itemId} not found in inventory!");
+            return;
+        }
+
         // Move item directly to home
         await MoveItemToHome(player, itemId);
     }
 
-    private async Task MoveItemToHome(PlayerData player, string itemId)
+    private async Task MoveItemToHome(PlayerData player, string instanceId)
     {
+        // Initialize mapping if needed
+        if (player.ItemInstanceToShopId == null)
+            player.ItemInstanceToShopId = new Dictionary<string, string>();
+
+        // If this is an old item without mapping (backward compatibility),
+        // assume the instanceId IS the shop item ID and create mapping
+        if (!player.ItemInstanceToShopId.ContainsKey(instanceId))
+        {
+            // This handles old saves where inventory items are shop IDs
+            player.ItemInstanceToShopId[instanceId] = instanceId;
+        }
+
         // Remove from inventory
-        player.Inventory.Remove(itemId);
+        if (player.Inventory.Contains(instanceId))
+        {
+            player.Inventory.Remove(instanceId);
+        }
+        else
+        {
+            Debug.LogWarning($"Attempted to move item {instanceId} but it's not in inventory!");
+            return;
+        }
 
-        // Add to HomeItems list
-        player.HomeItems.Add(itemId);
+        // Add to HomeItems
+        if (!player.HomeItems.Contains(instanceId))
+        {
+            player.HomeItems.Add(instanceId);
+        }
 
-        // Save player to Firestore
+        // Save to Firestore
         await firestoreService.SavePlayerAsync(currentUserId, player);
 
         // Refresh currentPlayer data
@@ -1165,13 +1259,17 @@ public class FirebaseController : MonoBehaviour
             return;
         }
 
-        // Reload fresh data from Firebase to get latest positions
+        // Reload fresh data from Firebase
         currentPlayer = await firestoreService.LoadPlayerAsync(currentUserId);
 
         if (currentPlayer == null || currentPlayer.HomeItems == null)
         {
             return;
         }
+
+        // Initialize mapping if it doesn't exist (backward compatibility)
+        if (currentPlayer.ItemInstanceToShopId == null)
+            currentPlayer.ItemInstanceToShopId = new Dictionary<string, string>();
 
         // Clear existing home item BUTTONS
         foreach (Transform child in homeContent)
@@ -1184,21 +1282,27 @@ public class FirebaseController : MonoBehaviour
         spawnedFurniture.Clear();
 
         // Create a button AND sprite for each item in home
-        foreach (string itemId in currentPlayer.HomeItems)
+        foreach (string instanceId in currentPlayer.HomeItems)
         {
+            // Get the shop item ID
+            string shopItemId = currentPlayer.ItemInstanceToShopId.ContainsKey(instanceId) 
+                ? currentPlayer.ItemInstanceToShopId[instanceId] 
+                : instanceId;
+
             // 1. Create the UI button
             GameObject buttonObj = Instantiate(homeItemButtonPrefab, homeContent);
-            ShopItem item = shopDatabase.GetItem(itemId);
-            string displayText = item != null ? item.Name : itemId;
+            ShopItem item = shopDatabase.GetItem(shopItemId);
+            string displayText = item != null ? item.Name : shopItemId;
             buttonObj.GetComponentInChildren<TMPro.TMP_Text>().text = displayText;
             Button btn = buttonObj.GetComponent<Button>();
-            btn.onClick.AddListener(() => ReturnItemToInventory(itemId));
+            string capturedInstanceId = instanceId;
+            btn.onClick.AddListener(() => ReturnItemToInventory(capturedInstanceId));
 
             // 2. Create the draggable sprite
-            SpawnFurnitureSprite(itemId);
+            SpawnFurnitureSprite(instanceId);
         }
 
-        // 3. AFTER all furniture is spawned, restore the layer order
+        // 3. Restore layer order after all items are spawned
         RestoreFurnitureLayerOrder();
     }
 
@@ -1284,12 +1388,17 @@ public class FirebaseController : MonoBehaviour
         Debug.Log($"Saved position for {itemId}: {position}");
     }
 
-    private void SpawnFurnitureSprite(string itemId)
+    private void SpawnFurnitureSprite(string instanceId)
     {
-        ShopItem shopItem = shopDatabase.GetItem(itemId);
+        // Get the shop item ID from mapping
+        string shopItemId = currentPlayer.ItemInstanceToShopId.ContainsKey(instanceId) 
+            ? currentPlayer.ItemInstanceToShopId[instanceId] 
+            : instanceId;
+
+        ShopItem shopItem = shopDatabase.GetItem(shopItemId);
         if (shopItem == null)
         {
-            Debug.LogWarning($"Item not found in ShopDatabase: {itemId}");
+            Debug.LogWarning($"Item not found in ShopDatabase: {shopItemId}");
             return;
         }
 
@@ -1302,24 +1411,20 @@ public class FirebaseController : MonoBehaviour
 
         GameObject furnitureObj = Instantiate(prefab, furnitureDisplayArea);
 
-        // Apply scale from ShopItem
+        // Apply scale
         if (shopItem != null)
         {
             furnitureObj.transform.localScale = Vector3.one * shopItem.Scale;
         }
 
-        // Set the correct sprite for this specific item variant
+        // Set sprite
         UnityEngine.UI.Image img = furnitureObj.GetComponent<UnityEngine.UI.Image>();
         if (img != null)
         {
-            Sprite itemSprite = shopDatabase.GetSprite(itemId);
+            Sprite itemSprite = shopDatabase.GetSprite(shopItemId);
             if (itemSprite != null)
             {
                 img.sprite = itemSprite;
-            }
-            else
-            {
-                Debug.LogWarning($"No sprite found for item: {itemId}");
             }
         }
 
@@ -1327,20 +1432,20 @@ public class FirebaseController : MonoBehaviour
         if (draggable == null)
             draggable = furnitureObj.AddComponent<DraggableFurniture>();
 
-        draggable.itemId = itemId;
+        draggable.itemId = instanceId; // Use instance ID, not shop ID
         draggable.itemType = shopItem.Type;
         draggable.firebaseController = this;
         draggable.draggableArea = furnitureDisplayArea;
 
-        // Load saved position or use default
-        Vector2 position = GetSavedPosition(itemId, shopItem.Type);
+        // Load saved position
+        Vector2 position = GetSavedPosition(instanceId, shopItem.Type);
         draggable.SetPosition(position);
 
-        // Load and apply saved flip state
-        bool isFlipped = GetSavedFlipState(itemId);
+        // Load flip state
+        bool isFlipped = GetSavedFlipState(instanceId);
         draggable.SetFlipped(isFlipped);
-        
-        spawnedFurniture[itemId] = furnitureObj;
+
+        spawnedFurniture[instanceId] = furnitureObj;
     }
 
     public async void SaveFurnitureFlip(string itemId, bool isFlipped)

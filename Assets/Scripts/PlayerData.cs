@@ -15,6 +15,7 @@ public class PlayerData
     [FirestoreProperty] public Dictionary<string, Vector2Data> HomeItemPositions { get; set; } = new Dictionary<string, Vector2Data>();
     [FirestoreProperty] public Dictionary<string, int> HomeItemLayers { get; set; }
     [FirestoreProperty] public Dictionary<string, bool> HomeItemFlipped { get; set; } = new Dictionary<string, bool>();
+    [FirestoreProperty] public Dictionary<string, string> ItemInstanceToShopId { get; set; } = new Dictionary<string, string>();
     [FirestoreProperty] public List<SleepLog> SleepLogs { get; set; } = new List<SleepLog>();
     [FirestoreProperty] public List<CustomGoal> CustomGoals { get; set; }
     [FirestoreProperty] public int SleepLogStreak { get; set; } = 0;
