@@ -1197,6 +1197,32 @@ public class FirebaseController : MonoBehaviour
             // 2. Create the draggable sprite
             SpawnFurnitureSprite(itemId);
         }
+
+        // 3. AFTER all furniture is spawned, restore the layer order
+        RestoreFurnitureLayerOrder();
+    }
+
+    private void RestoreFurnitureLayerOrder()
+    {
+        if (currentPlayer.HomeItemLayers == null) return;
+
+        // Sort items by their saved layer index
+        var sortedItems = currentPlayer.HomeItemLayers.OrderBy(kvp => kvp.Value);
+
+        // Apply the layer order
+        foreach (var kvp in sortedItems)
+        {
+            string itemId = kvp.Key;
+            int layerIndex = kvp.Value;
+
+            if (spawnedFurniture.TryGetValue(itemId, out GameObject furnitureObj))
+            {
+                if (furnitureObj != null)
+                {
+                    furnitureObj.transform.SetSiblingIndex(layerIndex);
+                }
+            }
+        }
     }
 
     public async void ReturnItemToInventory(string itemId)
@@ -1313,14 +1339,7 @@ public class FirebaseController : MonoBehaviour
         // Load and apply saved flip state
         bool isFlipped = GetSavedFlipState(itemId);
         draggable.SetFlipped(isFlipped);
-
-        // Restore layer order
-        if (currentPlayer.HomeItemLayers != null &&
-            currentPlayer.HomeItemLayers.TryGetValue(itemId, out int savedLayer))
-        {
-            furnitureObj.transform.SetSiblingIndex(savedLayer);
-        }
-
+        
         spawnedFurniture[itemId] = furnitureObj;
     }
 

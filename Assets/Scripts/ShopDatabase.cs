@@ -31,7 +31,7 @@ public class ShopDatabase
         Items["chair3"] = new ShopItem("chair3", "Light Wood Chair", "chair", 200, 0.5f, 3);
         Items["chair4"] = new ShopItem("chair4", "Dark Wood Chair", "chair", 250, 0.5f, 4);
         Items["chair5"] = new ShopItem("chair5", "Office Chair", "chair", 300, 0.5f, 5);
-        Items["chair6"] = new ShopItem("chair6", "Comfy Chair", "chair", 400, 0.5f, 6);
+        Items["chair6"] = new ShopItem("chair6", "Comfy Chair", "chair", 400, 1.0f, 6);
         Items["chair7"] = new ShopItem("chair7", "White Chair", "chair", 450, 0.6f, 8);
 
         // Desks
