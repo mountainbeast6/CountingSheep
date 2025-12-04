@@ -37,7 +37,7 @@ TextureImporter:
   maxTextureSize: 2048
   textureSettings:
     serializedVersion: 2
-    filterMode: 1
+    filterMode: 0
     aniso: 1
     mipBias: 0
     wrapU: 1
@@ -116,13 +116,13 @@ TextureImporter:
       name: White_Chair_0
       rect:
         serializedVersion: 2
-        x: 196
-        y: 150
-        width: 137
-        height: 229
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
+        x: 149
+        y: 99
+        width: 184
+        height: 297
+      alignment: 9
+      pivot: {x: 0.6028479, y: 0.50910234}
+      border: {x: 6, y: 0, z: 15, w: 0}
       customData: 
       outline: []
       physicsShape: []
@@ -138,7 +138,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 150f6687261d42a4e9f4e3df341a8044
     internalID: 0
     vertices: []
     indices: 
