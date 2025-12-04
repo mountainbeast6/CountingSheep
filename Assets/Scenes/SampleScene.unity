@@ -12555,7 +12555,13 @@ MonoBehaviour:
   bookshelfSprites:
   - {fileID: -8174865062497381088, guid: 6810f9d19bf331544ae6d2778fac808f, type: 3}
   - {fileID: 4312506549876820340, guid: e97b2cfa33eb50b469dacc306e9671bb, type: 3}
+  - {fileID: -8511759580665838590, guid: 8caea4cec936b9c48a5335570f79bc24, type: 3}
+  - {fileID: 7428929496049961234, guid: ec46734a2586cbc42a29005a7e15a999, type: 3}
   - {fileID: 1870147077303001994, guid: 57b036748cb13b841adebf21ccdb0b6c, type: 3}
+  - {fileID: -2774393824632998569, guid: fb5ad6bbdc9cef242896f525d7f4b964, type: 3}
+  - {fileID: -5474203228202136499, guid: cddc5797a58c6f64b993bed60ae7a65d, type: 3}
+  - {fileID: -480010498827801338, guid: 80ff91497035bd54aa923424780ce089, type: 3}
+  - {fileID: 5920032283436738762, guid: b6ff2eb0f6eb23441af80bcc13d437f5, type: 3}
   paintingSprites:
   - {fileID: -7335058585554103291, guid: ef522ce472f782c48a46c701939b9af4, type: 3}
   - {fileID: 5385648129830978985, guid: c0829eebb3425524ab238c810ac04a9c, type: 3}
